@@ -167,6 +167,7 @@ actor VaporServer {
             let port = await self.port
             
             var docOcrCheckBox = ""
+            var docOcrApiPre = ""
             if #available(iOS 26, *) {
                 docOcrCheckBox = """
                 <div>
@@ -174,8 +175,17 @@ actor VaporServer {
                     <label for="docOcr">Document Paragraph Detection</label>
                 </div><br>
                 """
+                
+                docOcrApiPre = """
+                OR
+                <h3>Upload an image via <code>docOCR</code> API:</h3>
+                <pre><code>curl -H "Accept: application/json" \\
+                  -X POST http://&lt;YOUR IP&gt;:\(port)/docOCR \\
+                  -F "file=@01.png"</code></pre>
+                """
             } else {
                 docOcrCheckBox = ""
+                docOcrApiPre = ""
             }
 
             let html = """
@@ -218,6 +228,7 @@ actor VaporServer {
                 <pre><code>curl -H "Accept: application/json" \\
               -X POST http://&lt;YOUR IP&gt;:\(port)/upload \\
               -F "file=@01.png"</code></pre>
+                \(docOcrApiPre)
                 <hr>
                 <h3>OCR Test:</h3>
                 <form id="ocrForm" action="/upload" method="post" enctype="multipart/form-data">
