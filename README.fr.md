@@ -241,7 +241,7 @@ Sur la page web, cochez `Document Paragraph Detection` :
 
 ![image4](images/image4.png)
 
-Résultats de la détection des paragraphes :
+Résultats de la reconnaissance des paragraphes :
 
 ![image5](images/image5.png)
 

@@ -241,7 +241,7 @@ On the webpage, check `Document Paragraph Detection`:
 
 ![image4](images/image4.png)
 
-Paragraph detection results:
+Paragraph recognition results:
 
 ![image5](images/image5.png)
 
