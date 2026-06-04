@@ -253,6 +253,16 @@ curl -H "Accept: application/json" \
     -F "file=@01.png"
 ````
 
+The JSON response looks like this:
+
+```
+{
+    "success": true,
+    "message": "OCR completed successfully",
+    "ocr_text": "OCR text..."
+}
+```
+
 
 ## Features
 
