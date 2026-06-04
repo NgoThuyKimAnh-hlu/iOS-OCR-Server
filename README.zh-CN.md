@@ -253,6 +253,16 @@ curl -H "Accept: application/json" \
     -F "file=@01.png"
 ````
 
+JSON 响应格式如下：
+
+```json
+{
+    "success": true,
+    "message": "OCR completed successfully",
+    "ocr_text": "OCR text..."
+}
+```
+
 
 ## 功能特色
 

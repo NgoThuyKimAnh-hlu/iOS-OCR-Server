@@ -253,6 +253,16 @@ curl -H "Accept: application/json" \
     -F "file=@01.png"
 ````
 
+JSON 응답은 다음과 같습니다：
+
+```json
+{
+    "success": true,
+    "message": "OCR completed successfully",
+    "ocr_text": "OCR text..."
+}
+```
+
 
 ## 기능
 
