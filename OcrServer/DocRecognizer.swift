@@ -13,18 +13,20 @@ class DocRecognizer {
     let usesLanguageCorrection : Bool
     let automaticallyDetectsLanguage : Bool
     
-    // VN-specialized fork: mặc định TẮT auto-detect + correction để bảo toàn dấu tiếng Việt
-    // và số hiệu văn bản ("255/2024/NĐ-CP"). Đây là fix gốc lỗi OCR ở Nghị định 255.
-    init(usesLanguageCorrection: Bool = false, automaticallyDetectsLanguage: Bool = false) {
+    init(usesLanguageCorrection: Bool = true, automaticallyDetectsLanguage: Bool = true) {
         self.usesLanguageCorrection = usesLanguageCorrection
         self.automaticallyDetectsLanguage = automaticallyDetectsLanguage
     }
 
     func recognizeParagraphText(from imageData: Data) async -> String {
             var request = RecognizeDocumentsRequest()
-            // PIN tiếng Việt — không để engine auto-detect nhầm sang ngôn ngữ Latin khác rồi "sửa" mất dấu.
+            // === Điểm KHÁC BIỆT DUY NHẤT của fork so với app gốc (Settings KHÔNG làm được) ===
+            // App gốc không có ô chọn ngôn ngữ → RecognizeDocumentsRequest mặc định nhận diện en-US
+            // → gốc lỗi OCR tiếng Việt ở Nghị định 255. Ghim "vi" là bắt buộc.
+            // Hai dòng dưới đi CÙNG NHAU: pin recognitionLanguages chỉ hiệu lực khi auto-detect TẮT.
             request.textRecognitionOptions.recognitionLanguages = [Locale.Language(identifier: "vi")]
-            request.textRecognitionOptions.automaticallyDetectLanguage = automaticallyDetectsLanguage
+            request.textRecognitionOptions.automaticallyDetectLanguage = false
+            // useLanguageCorrection vẫn để Settings điều khiển → là biến A/B khi benchmark (on vs off).
             request.textRecognitionOptions.useLanguageCorrection = usesLanguageCorrection
             request.textRecognitionOptions.maximumCandidateCount = 1
 
