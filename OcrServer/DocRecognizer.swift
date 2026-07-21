@@ -13,13 +13,17 @@ class DocRecognizer {
     let usesLanguageCorrection : Bool
     let automaticallyDetectsLanguage : Bool
     
-    init(usesLanguageCorrection: Bool = true, automaticallyDetectsLanguage: Bool = true) {
+    // VN-specialized fork: mặc định TẮT auto-detect + correction để bảo toàn dấu tiếng Việt
+    // và số hiệu văn bản ("255/2024/NĐ-CP"). Đây là fix gốc lỗi OCR ở Nghị định 255.
+    init(usesLanguageCorrection: Bool = false, automaticallyDetectsLanguage: Bool = false) {
         self.usesLanguageCorrection = usesLanguageCorrection
         self.automaticallyDetectsLanguage = automaticallyDetectsLanguage
     }
-    
+
     func recognizeParagraphText(from imageData: Data) async -> String {
             var request = RecognizeDocumentsRequest()
+            // PIN tiếng Việt — không để engine auto-detect nhầm sang ngôn ngữ Latin khác rồi "sửa" mất dấu.
+            request.textRecognitionOptions.recognitionLanguages = [Locale.Language(identifier: "vi")]
             request.textRecognitionOptions.automaticallyDetectLanguage = automaticallyDetectsLanguage
             request.textRecognitionOptions.useLanguageCorrection = usesLanguageCorrection
             request.textRecognitionOptions.maximumCandidateCount = 1
