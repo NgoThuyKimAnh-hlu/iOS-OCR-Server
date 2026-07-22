@@ -177,39 +177,39 @@ actor VaporServer {
     }
 
     func start() async throws {
-        guard runTask == nil else { return } // 已在跑就不重複啟動
+        guard runTask == nil, app == nil else { return }
 
         let app = try await Application.make(environment)
         app.http.server.configuration.hostname = host
         app.http.server.configuration.port = port
+        app.http.server.configuration.reuseAddress = true
+        app.middleware.use(RequestMetricsMiddleware(), at: .beginning)
 
         try routes(app)
 
+        do {
+            try await app.startup()
+        } catch {
+            try? await app.asyncShutdown()
+            throw error
+        }
+
         self.app = app
         isRunning = true
-
-        // 用 Task 背景執行事件迴圈
         runTask = Task { [weak app, weak self] in
-            guard let self = self else { return }
+            guard let app, let self else { return }
             var hadError = false
             do {
-                try await app?.execute()
+                if let running = app.running {
+                    try await running.onStop.get()
+                } else {
+                    hadError = true
+                }
             } catch {
                 hadError = true
             }
-            
-            // 通知外界「已停止」
-            if let cb = await self.onStopped { cb() }
-            
-            // 依設定自動重啟
-            if await self.shouldAutoRestart && hadError {
-                await self.cleanupAfterStop()
-                NotificationCenter.default.post(
-                    name: .vaporServerShouldRestart,
-                    object: nil,
-                    userInfo: ["reason": "crash"]
-                )
-            }
+
+            await self.handleStopped(hadError: hadError)
         }
     }
 
@@ -241,15 +241,39 @@ actor VaporServer {
     // MARK: - Cleanup After Stop
     
     private func cleanupAfterStop() {
-        //runTask?.cancel()
         runTask = nil
         app = nil
         isRunning = false
     }
 
+    private func handleStopped(hadError: Bool) {
+        cleanupAfterStop()
+        if let onStopped { onStopped() }
+
+        if shouldAutoRestart && hadError {
+            NotificationCenter.default.post(
+                name: .vaporServerShouldRestart,
+                object: nil,
+                userInfo: ["reason": "crash"]
+            )
+        }
+    }
+
     // MARK: - Routes
 
     private func routes(_ app: Application) throws {
+        app.get("health") { [weak self] req async throws -> Response in
+            guard let self else { throw Abort(.internalServerError) }
+            let port = await self.port
+            let health = await MainActor.run {
+                ServerTelemetry.shared.healthResponse(
+                    port: port,
+                    keepAlive: KeepAliveService.shared.isActive
+                )
+            }
+            return try Self.jsonResponse(.ok, health)
+        }
+
         // GET /
         app.get { [weak self] req async throws -> Response in
             guard let self else { throw Abort(.internalServerError) }

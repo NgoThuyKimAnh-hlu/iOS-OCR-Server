@@ -50,4 +50,13 @@ class Settings {
             UserDefaults.standard.set(newValue, forKey: "automaticallyDetectsLanguage")
         }
     }
+
+    var keepAliveEnabled: Bool {
+        get {
+            return UserDefaults.standard.object(forKey: "keepAliveEnabled") as? Bool ?? true
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "keepAliveEnabled")
+        }
+    }
 }

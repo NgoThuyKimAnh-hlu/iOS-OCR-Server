@@ -8,29 +8,34 @@
 import SwiftUI
 import Combine
 import Vision
+import Foundation
 
 @MainActor
 final class VaporServerManager: ObservableObject {
     private let server = VaporServer()
     private var cancellables = Set<AnyCancellable>()
+    private var lifecycleTask: Task<Void, Never>?
+    private var watchdogTask: Task<Void, Never>?
+    private var bonjourService: NetService?
+    private let primaryPort = 8000
+    private let fallbackPorts = 8001...8010
     
-    var port: Int = Settings.shared.httpPort
+    @Published private(set) var port: Int = 8000
 
     @Published var status: String = ""
     @Published var networkAddresses: [String: String] = [:]
     @Published var isRestarting = false
+    @Published private(set) var isRunning = false
 
     let networkInterfaces = ["en0", "en1", "en2", "en3", "en4", "en5"]
 
     init() {
+        Settings.shared.httpPort = primaryPort
         NotificationCenter.default.publisher(for: .vaporServerShouldRestart)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                guard let self else { return }
-                Task {
-                    self.status = String(localized: "server stopped - restarting...")
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    self.startServer()
+                Task { @MainActor in
+                    self?.beginRestart(reason: "/server/crash")
                 }
             }
             .store(in: &cancellables)
@@ -38,62 +43,41 @@ final class VaporServerManager: ObservableObject {
     }
     
     func startServer() {
-        Task {
-            isRestarting = true
-            await setupParameters()
-            
-            // 開啟 Server 啟動失敗自動重啟
-            await server.setAutoRestart(true)
-            
-            // Server 停止時更新 status 文字
-            await server.setOnStopped { [weak self] in
-                guard let self else { return }
-                Task { @MainActor in
-                    self.status = String(localized:"server stopped")
-                }
-            }
-            
-            do {
-                try await server.start()
-                status = String(localized: "server is running")
-                refreshNetworkAddresses()
-            } catch {
-                status = String(localized: "unable to start the server")
-            }
-            isRestarting = false
+        guard lifecycleTask == nil else { return }
+        lifecycleTask = Task { [weak self] in
+            guard let self else { return }
+            await self.performStart()
+            self.lifecycleTask = nil
         }
     }
 
     func stopServer() {
-        Task {
-            isRestarting = true
-            await server.stop()
-            status = String(localized: "server stopped")
-            isRestarting = false
+        guard lifecycleTask == nil else { return }
+        lifecycleTask = Task { [weak self] in
+            guard let self else { return }
+            self.isRestarting = true
+            self.watchdogTask?.cancel()
+            self.watchdogTask = nil
+            self.stopBonjour()
+            await self.server.stop()
+            KeepAliveService.shared.stop()
+            ServerTelemetry.shared.markServerStopped()
+            self.isRunning = false
+            self.status = String(localized: "server stopped")
+            self.isRestarting = false
+            self.lifecycleTask = nil
         }
     }
 
     func restartServer() {
-        self.status = String(localized: "server restarting...")
-        Task {
-            isRestarting = true
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            await setupParameters()
-            do {
-                try await server.restart()
-                status = String(localized: "server is running")
-                refreshNetworkAddresses()
-            } catch {
-                status = String(localized: "unable to start the server")
-            }
-            isRestarting = false
-        }
+        beginRestart(reason: nil)
     }
 
-    // 從 Settings 套用參數
-    private func setupParameters() async {
-        port = Settings.shared.httpPort
-        
+    func setKeepAliveEnabled(_ enabled: Bool) {
+        KeepAliveService.shared.setEnabled(enabled)
+    }
+
+    private func configureServer(port: Int) async {
         let level: RecognizeTextRequest.RecognitionLevel =
                 (Settings.shared.recognitionLevel == "Fast") ? .fast : .accurate
         
@@ -103,6 +87,172 @@ final class VaporServerManager: ObservableObject {
             usesLanguageCorrection: Settings.shared.languageCorrection,
             automaticallyDetectsLanguage: Settings.shared.automaticallyDetectsLanguage,
         )
+    }
+
+    private func performStart() async {
+        isRestarting = true
+        status = String(localized: "server restarting...")
+        KeepAliveService.shared.setEnabled(Settings.shared.keepAliveEnabled)
+
+        await server.setAutoRestart(true)
+        await server.setOnStopped { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                self.stopBonjour()
+                self.isRunning = false
+                ServerTelemetry.shared.markServerStopped()
+                self.status = String(localized: "server stopped")
+            }
+        }
+
+        do {
+            let selectedPort = try await startUsingPortPolicy()
+            port = selectedPort
+            isRunning = true
+            status = String(localized: "server is running")
+            ServerTelemetry.shared.markServerStarted()
+            refreshNetworkAddresses()
+            publishBonjour(port: selectedPort)
+            startWatchdog()
+        } catch {
+            isRunning = false
+            status = String(localized: "unable to start the server")
+            ServerTelemetry.shared.recordSystemEvent(
+                method: "SERVER",
+                path: "/start",
+                status: 500
+            )
+        }
+        isRestarting = false
+    }
+
+    private func beginRestart(reason: String?) {
+        guard lifecycleTask == nil else { return }
+        if let reason {
+            ServerTelemetry.shared.recordAutomaticRestart(reason: reason)
+        }
+
+        lifecycleTask = Task { [weak self] in
+            guard let self else { return }
+            self.isRestarting = true
+            self.status = String(localized: "server restarting...")
+            self.watchdogTask?.cancel()
+            self.watchdogTask = nil
+            self.stopBonjour()
+
+            if reason != nil {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+
+            await self.server.stop()
+            self.isRunning = false
+            await self.performStart()
+            self.lifecycleTask = nil
+        }
+    }
+
+    private func startUsingPortPolicy() async throws -> Int {
+        var lastError: Error?
+
+        for attempt in 1...5 {
+            await configureServer(port: primaryPort)
+            do {
+                try await server.start()
+                return primaryPort
+            } catch {
+                lastError = error
+                ServerTelemetry.shared.recordSystemEvent(
+                    method: "BIND",
+                    path: ":\(primaryPort)/attempt/\(attempt)",
+                    status: 503
+                )
+                if attempt < 5 {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+            }
+        }
+
+        for fallbackPort in fallbackPorts {
+            await configureServer(port: fallbackPort)
+            do {
+                try await server.start()
+                return fallbackPort
+            } catch {
+                lastError = error
+            }
+        }
+
+        throw lastError ?? ServerManagerError.noAvailablePort
+    }
+
+    private func startWatchdog() {
+        watchdogTask?.cancel()
+        watchdogTask = Task { [weak self] in
+            var consecutiveFailures = 0
+
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: 60_000_000_000)
+                } catch {
+                    return
+                }
+
+                guard let self, self.isRunning, !self.isRestarting else { continue }
+                if await self.healthCheck() {
+                    consecutiveFailures = 0
+                } else {
+                    consecutiveFailures += 1
+                    ServerTelemetry.shared.recordSystemEvent(
+                        method: "WATCHDOG",
+                        path: "/health/failure/\(consecutiveFailures)",
+                        status: 503
+                    )
+                    if consecutiveFailures >= 2 {
+                        self.beginRestart(reason: "/health/unresponsive")
+                        return
+                    }
+                }
+            }
+        }
+    }
+
+    private func healthCheck() async -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:\(port)/health") else {
+            return false
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  http.statusCode == 200,
+                  let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  object["status"] as? String == "ok" else {
+                return false
+            }
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func publishBonjour(port: Int) {
+        stopBonjour()
+        let service = NetService(
+            domain: "local.",
+            type: "_http._tcp.",
+            name: "compute",
+            port: Int32(port)
+        )
+        service.includesPeerToPeer = true
+        service.publish()
+        bonjourService = service
+    }
+
+    private func stopBonjour() {
+        bonjourService?.stop()
+        bonjourService = nil
     }
 
     func refreshNetworkAddresses() {
@@ -154,4 +304,8 @@ final class VaporServerManager: ObservableObject {
 
         return nil
     }
+}
+
+private enum ServerManagerError: Error {
+    case noAvailablePort
 }

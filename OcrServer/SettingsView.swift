@@ -13,9 +13,7 @@ struct SettingsView: View {
     @State var recognitionLevel = Settings.shared.recognitionLevel
     @State var languageCorrection = Settings.shared.languageCorrection
     @State var autoDetectLanguage = Settings.shared.automaticallyDetectsLanguage
-    @State var httpPort: String = String(Settings.shared.httpPort)
-    @State private var showingPortSheet = false
-    @State private var inputPortText: String = String(Settings.shared.httpPort)
+    @State var keepAliveEnabled = Settings.shared.keepAliveEnabled
     
     var body: some View {
         NavigationView {
@@ -39,11 +37,25 @@ struct SettingsView: View {
                                      isOn: $autoDetectLanguage)
                     }
                     Section("Server") {
-                        SettingsRow(icon: "server.rack", title: "HTTP Port", value: $httpPort)
-                            .onTapGesture {
-                                inputPortText = httpPort
-                                showingPortSheet = true
-                            }
+                        HStack(spacing: 12) {
+                            Image(systemName: "server.rack")
+                                .font(.title2)
+                                .foregroundColor(.accentColor)
+                                .frame(width: 28, height: 28)
+                            Text("HTTP Port")
+                                .font(.body)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Text("8000 (pinned)")
+                                .font(.subheadline.monospacedDigit())
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                        SettingsRow2(
+                            icon: "waveform",
+                            title: "Keep alive khi khóa máy",
+                            isOn: $keepAliveEnabled
+                        )
                     }
                     
                     Button(action: apply) {
@@ -85,33 +97,8 @@ struct SettingsView: View {
             .onChange(of: autoDetectLanguage) { oldValue, newValue in
                 Settings.shared.automaticallyDetectsLanguage = newValue
             }
-            .sheet(isPresented: $showingPortSheet) {
-                VStack {
-                    HStack {
-                        Text("Set HTTP Port: ")
-                            .padding(.trailing, 8)
-                        TextField("HTTP Port", text: $inputPortText)
-                            .keyboardType(.numberPad)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    Spacer()
-                        .frame(height: 40)
-                    HStack {
-                        Button("Cancel") { showingPortSheet = false }
-                            .fontWeight(.medium)
-                        Spacer()
-                        Button("Confirm") {
-                            guard let port = validatedHTTPPort else { return }
-                            Settings.shared.httpPort = port
-                            httpPort = String(port)
-                            inputPortText = String(port)
-                            showingPortSheet = false
-                        }
-                        .disabled(validatedHTTPPort == nil)
-                    }
-                }
-                .padding()
-                .presentationDetents([.height(200)])
+            .onChange(of: keepAliveEnabled) { oldValue, newValue in
+                serverManager.setKeepAliveEnabled(newValue)
             }
         }
     }
@@ -119,15 +106,6 @@ struct SettingsView: View {
     private func apply() {
         serverManager.restartServer()
     }
-    
-    private var validatedHTTPPort: Int? {
-        guard let port = Int(inputPortText.trimmingCharacters(in: .whitespacesAndNewlines)),
-              (1...65535).contains(port) else {
-            return nil
-        }
-        return port
-    }
-    
 }
     
 struct SettingsRow: View {
