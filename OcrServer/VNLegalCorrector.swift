@@ -12,6 +12,7 @@ enum CorrectorGroup: String, CaseIterable, Codable, Sendable, Hashable {
     case undiacriticMap = "undiacritic_map"
     case legalIDNormalize = "legalid_normalize"
     case ambiguousSkip = "ambiguous_skip"
+    case respectValid = "respect_valid"
 }
 
 struct OCRCorrectionTraceItem: Content, Sendable {
@@ -85,6 +86,7 @@ actor VNLegalCorrector {
     private var correctionMap: [String: String]?
     private var safeCorrections: [SafeCorrectionRule]?
     private var allCapsWordMap: [String: String]?
+    private var unigrams: [String: Int]?
 
     private init() {}
 
@@ -100,11 +102,13 @@ actor VNLegalCorrector {
         var output = text
         var applied = 0
         var trace: [OCRCorrectionTraceItem] = []
+        let respectValid = groups.contains(.respectValid)
 
         if groups.contains(.allcapsDiacritic) || groups.contains(.undiacriticMap) {
             let result = try applySafeCorrections(
                 to: output,
                 groups: groups,
+                respectValid: respectValid,
                 collectTrace: collectTrace
             )
             output = result.text
@@ -113,7 +117,11 @@ actor VNLegalCorrector {
         }
 
         if groups.contains(.undiacriticMap) {
-            let result = try applyCorpusMap(to: output, collectTrace: collectTrace)
+            let result = try applyCorpusMap(
+                to: output,
+                respectValid: respectValid,
+                collectTrace: collectTrace
+            )
             output = result.text
             applied += result.correctionsApplied
             trace.append(contentsOf: result.trace)
@@ -123,6 +131,7 @@ actor VNLegalCorrector {
             let result = try applyAllCapsWords(
                 to: output,
                 skipAmbiguous: groups.contains(.ambiguousSkip),
+                respectValid: respectValid,
                 collectTrace: collectTrace
             )
             output = result.text
@@ -149,9 +158,11 @@ actor VNLegalCorrector {
     private func applySafeCorrections(
         to text: String,
         groups: Set<CorrectorGroup>,
+        respectValid: Bool,
         collectTrace: Bool
     ) throws -> OCRCorrectionResult {
         let corrections = try loadSafeCorrections()
+        let vocabulary = respectValid ? try loadUnigrams() : [:]
         var output = text
         var applied = 0
         var trace: [OCRCorrectionTraceItem] = []
@@ -179,12 +190,31 @@ actor VNLegalCorrector {
                 let replacement = rule.case_insensitive
                     ? Self.casePhrase(source: original, replacement: rule.target)
                     : rule.target
-                guard replacement != original else { continue }
-                output.replaceSubrange(range, with: replacement)
+                let guarded = respectValid
+                    ? Self.guardedPhrase(
+                        source: original,
+                        replacement: replacement,
+                        vocabulary: vocabulary
+                    )
+                    : replacement
+                guard guarded != original else {
+                    if collectTrace, respectValid, replacement != original {
+                        trace.append(
+                            OCRCorrectionTraceItem(
+                                token_raw: original,
+                                token_out: original,
+                                rule_id: "respect_valid:\(rule.rule_id):\(rule.source)",
+                                action: "skipped_valid"
+                            )
+                        )
+                    }
+                    continue
+                }
+                output.replaceSubrange(range, with: guarded)
                 applied += 1
                 if collectTrace {
                     let originalWords = original.split(whereSeparator: \.isWhitespace).map(String.init)
-                    let replacementWords = replacement.split(whereSeparator: \.isWhitespace).map(String.init)
+                    let replacementWords = guarded.split(whereSeparator: \.isWhitespace).map(String.init)
                     if originalWords.count == replacementWords.count {
                         for (sourceWord, targetWord) in zip(originalWords, replacementWords) {
                             trace.append(
@@ -200,7 +230,7 @@ actor VNLegalCorrector {
                         trace.append(
                             OCRCorrectionTraceItem(
                                 token_raw: original,
-                                token_out: replacement,
+                                token_out: guarded,
                                 rule_id: "\(rule.rule_id):\(rule.source)",
                                 action: allCaps ? "diacritized" : "normalized"
                             )
@@ -215,9 +245,11 @@ actor VNLegalCorrector {
 
     private func applyCorpusMap(
         to text: String,
+        respectValid: Bool,
         collectTrace: Bool
     ) throws -> OCRCorrectionResult {
         let map = try loadCorrectionMap()
+        let vocabulary = respectValid ? try loadUnigrams() : [:]
         var parts = tokenize(text)
         let wordPartIndexes = parts.indices.filter { parts[$0].isWord }
         let words = wordPartIndexes.map { parts[$0].text }
@@ -237,10 +269,21 @@ actor VNLegalCorrector {
 
                 var changed = false
                 for offset in 0..<length {
-                    let replacement = Self.caseWord(
+                    let proposed = Self.caseWord(
                         source: sourceWords[offset],
                         replacement: targetWords[offset]
                     )
+                    let sourceIsValid = Self.isValidWord(
+                        sourceWords[offset],
+                        vocabulary: vocabulary
+                    )
+                    let targetIsValid = Self.isValidWord(
+                        proposed,
+                        vocabulary: vocabulary
+                    )
+                    let replacement = respectValid && (sourceIsValid || !targetIsValid)
+                        ? sourceWords[offset]
+                        : proposed
                     replacements[wordPartIndexes[index + offset]] = replacement
                     changed = changed || replacement != sourceWords[offset]
                     if collectTrace, replacement != sourceWords[offset] {
@@ -250,6 +293,17 @@ actor VNLegalCorrector {
                                 token_out: replacement,
                                 rule_id: "corpus:\(key)",
                                 action: "diacritized"
+                            )
+                        )
+                    } else if collectTrace, respectValid, proposed != sourceWords[offset] {
+                        trace.append(
+                            OCRCorrectionTraceItem(
+                                token_raw: sourceWords[offset],
+                                token_out: sourceWords[offset],
+                                rule_id: sourceIsValid
+                                    ? "respect_valid:corpus:\(key)"
+                                    : "invalid_target:corpus:\(key)",
+                                action: sourceIsValid ? "skipped_valid" : "skipped_invalid_target"
                             )
                         )
                     }
@@ -275,9 +329,11 @@ actor VNLegalCorrector {
     private func applyAllCapsWords(
         to text: String,
         skipAmbiguous: Bool,
+        respectValid: Bool,
         collectTrace: Bool
     ) throws -> OCRCorrectionResult {
         let map = try loadAllCapsWordMap()
+        let vocabulary = respectValid ? try loadUnigrams() : [:]
         var parts = tokenize(text)
         var applied = 0
         var trace: [OCRCorrectionTraceItem] = []
@@ -290,6 +346,19 @@ actor VNLegalCorrector {
                 continue
             }
             let key = original.lowercased()
+            if respectValid, Self.isValidWord(original, vocabulary: vocabulary) {
+                if collectTrace, map[key] != nil {
+                    trace.append(
+                        OCRCorrectionTraceItem(
+                            token_raw: original,
+                            token_out: original,
+                            rule_id: "respect_valid:allcaps:\(key)",
+                            action: "skipped_valid"
+                        )
+                    )
+                }
+                continue
+            }
             if skipAmbiguous, ambiguousAdminSyllables.contains(key) {
                 if collectTrace {
                     trace.append(
@@ -305,6 +374,9 @@ actor VNLegalCorrector {
             }
             guard let target = map[key] else { continue }
             let replacement = target.uppercased()
+            guard !respectValid || Self.isValidWord(replacement, vocabulary: vocabulary) else {
+                continue
+            }
             guard replacement != original else { continue }
             parts[index].text = replacement
             applied += 1
@@ -418,13 +490,13 @@ actor VNLegalCorrector {
                 used.insert(index)
                 result.append(stageTrace[index])
             } else if source == target,
-                      let ambiguousIndex = stageTrace.indices.first(where: {
+                      let skippedIndex = stageTrace.indices.first(where: {
                         !used.contains($0)
                             && stageTrace[$0].token_raw == source
-                            && stageTrace[$0].action == "skipped_ambiguous"
+                            && stageTrace[$0].action.hasPrefix("skipped_")
                       }) {
-                used.insert(ambiguousIndex)
-                result.append(stageTrace[ambiguousIndex])
+                used.insert(skippedIndex)
+                result.append(stageTrace[skippedIndex])
             } else {
                 result.append(
                     OCRCorrectionTraceItem(
@@ -465,10 +537,7 @@ actor VNLegalCorrector {
 
     private func loadAllCapsWordMap() throws -> [String: String] {
         if let allCapsWordMap { return allCapsWordMap }
-        let unigrams: [String: Int] = try Self.decodeCompressedJSON(
-            resource: "unigram.json",
-            extension: "zlib"
-        )
+        let unigrams = try loadUnigrams()
         var groups: [String: [RankedWord]] = [:]
         for (word, count) in unigrams where !word.contains(" ") && word.count <= 20 {
             let key = Self.stripDiacritics(word).lowercased()
@@ -485,6 +554,16 @@ actor VNLegalCorrector {
         }
         allCapsWordMap = result
         return result
+    }
+
+    private func loadUnigrams() throws -> [String: Int] {
+        if let unigrams { return unigrams }
+        let loaded: [String: Int] = try Self.decodeCompressedJSON(
+            resource: "unigram.json",
+            extension: "zlib"
+        )
+        unigrams = loaded
+        return loaded
     }
 
     private static func decodeCompressedJSON<T: Decodable>(
@@ -542,6 +621,40 @@ actor VNLegalCorrector {
             .replacingOccurrences(of: "đ", with: "d")
             .replacingOccurrences(of: "Đ", with: "D")
             .folding(options: [.diacriticInsensitive], locale: Locale(identifier: "vi_VN"))
+    }
+
+    private static func isValidWord(
+        _ value: String,
+        vocabulary: [String: Int]
+    ) -> Bool {
+        vocabulary[normalizedWord(value)] != nil
+    }
+
+    private static func normalizedWord(_ value: String) -> String {
+        value.precomposedStringWithCanonicalMapping.lowercased()
+    }
+
+    private static func guardedPhrase(
+        source: String,
+        replacement: String,
+        vocabulary: [String: Int]
+    ) -> String {
+        let sourceWords = source.split(whereSeparator: \.isWhitespace).map(String.init)
+        let replacementWords = replacement.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard sourceWords.count == replacementWords.count else { return source }
+
+        return zip(sourceWords, replacementWords).map { pair in
+            let sourceWord = pair.0
+            let replacementWord = pair.1
+            guard sourceWord != replacementWord,
+                  sourceWord.unicodeScalars.allSatisfy({ $0.properties.isAlphabetic }),
+                  replacementWord.unicodeScalars.allSatisfy({ $0.properties.isAlphabetic }),
+                  !isValidWord(sourceWord, vocabulary: vocabulary),
+                  isValidWord(replacementWord, vocabulary: vocabulary) else {
+                return sourceWord
+            }
+            return replacementWord
+        }.joined(separator: " ")
     }
 
     private static func caseWord(source: String, replacement: String) -> String {

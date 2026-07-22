@@ -79,6 +79,22 @@ def post_image(base_url: str, endpoint: str, path: Path, raw: bool, token: str) 
         raise RuntimeError(f"HTTP {error.code}: {detail}") from error
 
 
+def correction_counts(trace: list[dict[str, Any]], gold: str) -> tuple[int, int]:
+    good = bad = 0
+    for item in trace:
+        source = item.get("token_raw")
+        target = item.get("token_out")
+        if not source or not target or source == target:
+            continue
+        source_in_gold = source in gold
+        target_in_gold = target in gold
+        if target_in_gold and not source_in_gold:
+            good += 1
+        elif source_in_gold and not target_in_gold:
+            bad += 1
+    return good, bad
+
+
 def get_health(base_url: str) -> dict[str, Any]:
     request = urllib.request.Request(
         f"{base_url.rstrip('/')}/health",
@@ -116,6 +132,11 @@ def main() -> int:
     parser.add_argument("--token", default="")
     parser.add_argument("--pc-threshold", type=float, default=0.03)
     parser.add_argument("--pass-ratio", type=float, default=0.90)
+    parser.add_argument(
+        "--skip-debug",
+        action="store_true",
+        help="skip /debug/ocr correction precision counts",
+    )
     args = parser.parse_args()
 
     base_url = args.server if "://" in args.server else f"http://{args.server}"
@@ -131,9 +152,10 @@ def main() -> int:
         f"improve={health.get('ocr_improve', {}).get('enabled')}"
     )
     total_raw_edits = total_improved_edits = total_chars = 0
+    total_good = total_bad = 0
     regressions = 0
-    print("page                                      CER_raw  CER_improved    delta  PC_pass2 flags")
-    print("-" * 104)
+    print("page                                      CER_raw  CER_improved    delta   OK  BAD  PC_pass2 flags")
+    print("-" * 114)
     for row in rows:
         image_path = resolve_manifest_path(project_root, row["image_path"])
         target_path = resolve_manifest_path(project_root, row["target_path"])
@@ -152,6 +174,12 @@ def main() -> int:
         delta = improved_cer - raw_cer
         flags = improved_response.get("flags") or []
         needs_pc = bool(improved_response.get("needs_pass2")) or improved_cer > args.pc_threshold
+        good = bad = 0
+        if not args.skip_debug:
+            debug_response = post_image(base_url, "debug/ocr", image_path, raw=False, token=args.token)
+            good, bad = correction_counts(debug_response.get("corrector_trace") or [], gold)
+            total_good += good
+            total_bad += bad
         if improved_edits > raw_edits:
             regressions += 1
         total_raw_edits += raw_edits
@@ -159,17 +187,19 @@ def main() -> int:
         total_chars += denominator
         print(
             f"{row['id'][:40]:40} {raw_cer:8.3%} {improved_cer:13.3%} "
-            f"{delta:+8.3%} {'YES' if needs_pc else 'no ':>8} {','.join(flags)}"
+            f"{delta:+8.3%} {good:4d} {bad:4d} {'YES' if needs_pc else 'no ':>8} {','.join(flags)}"
         )
 
     weighted_raw = total_raw_edits / max(1, total_chars)
     weighted_improved = total_improved_edits / max(1, total_chars)
     ratio = weighted_improved / max(weighted_raw, 1e-12)
     passed = weighted_improved < weighted_raw and ratio <= args.pass_ratio
-    print("-" * 104)
+    print("-" * 114)
     print(
         f"weighted CER raw={weighted_raw:.3%} improved={weighted_improved:.3%} "
-        f"ratio={ratio:.3f} regressions={regressions}/{len(rows)} result={'PASS' if passed else 'NOT PASS'}"
+        f"ratio={ratio:.3f} regressions={regressions}/{len(rows)} "
+        f"corrections_OK={total_good} corrections_BAD={total_bad} "
+        f"result={'PASS' if passed else 'NOT PASS'}"
     )
     return 0 if passed else 2
 

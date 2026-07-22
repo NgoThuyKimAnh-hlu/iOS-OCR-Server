@@ -30,6 +30,8 @@ struct OCRRuntimeSettingsSnapshot: Sendable {
 
 class Settings {
     static let shared = Settings()
+    private static let correctorConfigurationVersion = 2
+    private static let defaultCorrectorGroups = CorrectorGroup.allCases.map(\.rawValue)
     
     private init() {
         
@@ -141,8 +143,18 @@ class Settings {
 
     var correctorGroupNames: [String] {
         get {
-            return UserDefaults.standard.stringArray(forKey: "correctorGroupNames")
-                ?? CorrectorGroup.allCases.map(\.rawValue)
+            let defaults = UserDefaults.standard
+            if defaults.integer(forKey: "correctorConfigurationVersion")
+                < Self.correctorConfigurationVersion {
+                defaults.set(
+                    Self.correctorConfigurationVersion,
+                    forKey: "correctorConfigurationVersion"
+                )
+                defaults.set(Self.defaultCorrectorGroups, forKey: "correctorGroupNames")
+                return Self.defaultCorrectorGroups
+            }
+            return defaults.stringArray(forKey: "correctorGroupNames")
+                ?? Self.defaultCorrectorGroups
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "correctorGroupNames")
