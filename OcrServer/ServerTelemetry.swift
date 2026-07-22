@@ -18,6 +18,26 @@ struct RequestLogEntry: Content, Identifiable, Sendable {
     let size: Int
 }
 
+actor RequestLogStore {
+    static let shared = RequestLogStore()
+
+    private let maximumLogCount = 200
+    private var entries: [RequestLogEntry] = []
+
+    private init() {}
+
+    func append(_ entry: RequestLogEntry) {
+        entries.append(entry)
+        if entries.count > maximumLogCount {
+            entries.removeFirst(entries.count - maximumLogCount)
+        }
+    }
+
+    func recent(limit: Int) -> [RequestLogEntry] {
+        Array(entries.suffix(min(max(0, limit), maximumLogCount)))
+    }
+}
+
 struct ServerBatteryStatus: Content, Sendable {
     let level: Int?
     let state: String
@@ -94,30 +114,15 @@ final class ServerTelemetry: ObservableObject {
     }
 
     func recordRequest(
-        method: String,
-        path: String,
-        status: Int,
-        durationMilliseconds: Double,
-        size: Int
+        _ entry: RequestLogEntry
     ) {
         requestsTotal += 1
-        if (200..<400).contains(status) {
+        if (200..<400).contains(entry.status) {
             requestsOK += 1
         } else {
             requestsFail += 1
         }
-
-        appendLog(
-            RequestLogEntry(
-                id: UUID(),
-                timestamp: Date(),
-                method: method,
-                path: path,
-                status: status,
-                duration_ms: durationMilliseconds,
-                size: max(0, size)
-            )
-        )
+        appendLog(entry)
     }
 
     func recordSystemEvent(method: String, path: String, status: Int) {
@@ -311,12 +316,16 @@ struct RequestMetricsMiddleware: AsyncMiddleware {
         started: UInt64
     ) async {
         let elapsed = DispatchTime.now().uptimeNanoseconds - started
-        await ServerTelemetry.shared.recordRequest(
+        let entry = RequestLogEntry(
+            id: UUID(),
+            timestamp: Date(),
             method: request.method.string,
             path: request.url.path,
             status: status,
-            durationMilliseconds: Double(elapsed) / 1_000_000,
-            size: size
+            duration_ms: Double(elapsed) / 1_000_000,
+            size: max(0, size)
         )
+        await RequestLogStore.shared.append(entry)
+        await ServerTelemetry.shared.recordRequest(entry)
     }
 }

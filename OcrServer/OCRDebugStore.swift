@@ -74,6 +74,7 @@ struct OCRDebugTraceResponse: Content, Sendable {
 
 struct OCRDebugLastResponse: Content, Sendable {
     let traces: [OCRDebugTraceResponse]
+    let request_logs: [RequestLogEntry]
 }
 
 actor OCRDebugStore {

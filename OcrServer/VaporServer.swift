@@ -402,6 +402,8 @@ struct AdminKeepAliveRequest: Content, Sendable {
 
 struct AdminLogResponse: Content, Sendable {
     let logs: [RequestLogEntry]
+    let entries: [RequestLogEntry]
+    let count: Int
 }
 
 private enum AdminSettingsError: LocalizedError {
@@ -669,10 +671,11 @@ actor VaporServer {
 
         app.get("admin", "log") { req async throws -> Response in
             try await Self.requireAdminToken(request: req)
-            let logs = await MainActor.run {
-                ServerTelemetry.shared.recentLogs(limit: 200)
-            }
-            return try Self.jsonResponse(.ok, AdminLogResponse(logs: logs))
+            let logs = await RequestLogStore.shared.recent(limit: 200)
+            return try Self.jsonResponse(
+                .ok,
+                AdminLogResponse(logs: logs, entries: logs, count: logs.count)
+            )
         }
 
         app.on(.POST, "debug", "ocr", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
@@ -776,7 +779,11 @@ actor VaporServer {
                 )
             }
             let traces = await OCRDebugStore.shared.recent(limit: limit)
-            return try Self.jsonResponse(.ok, OCRDebugLastResponse(traces: traces))
+            let requestLogs = await RequestLogStore.shared.recent(limit: limit)
+            return try Self.jsonResponse(
+                .ok,
+                OCRDebugLastResponse(traces: traces, request_logs: requestLogs)
+            )
         }
 
         // GET /
