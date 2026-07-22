@@ -147,4 +147,3 @@ post-save delay to assume restart readiness.
   device-runtime checks.
 - The required post-fix p0001 `OK >> BAD` device result remains open. What is
   verified offline is that every named destructive regression is blocked.
-
