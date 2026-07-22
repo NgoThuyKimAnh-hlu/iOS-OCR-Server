@@ -75,6 +75,43 @@ struct SynthesizeRequestBody: Content {
     let rate: Float?
 }
 
+struct LLMRequestBody: Content {
+    let prompt: String
+    let system: String?
+    let max: Int?
+}
+
+struct LLMResponse: Content {
+    let success: Bool
+    let text: String
+}
+
+struct NERRequestBody: Content {
+    let text: String
+}
+
+struct NEREntityResponse: Content {
+    let text: String
+    let type: String
+}
+
+struct NERResponse: Content {
+    let success: Bool
+    let entities: [NEREntityResponse]
+    let so_hieu: [String]
+    let dieu_khoan: [String]
+}
+
+struct EmbedRequestBody: Content {
+    let text: String
+}
+
+struct EmbedResponse: Content {
+    let success: Bool
+    let vector: [Double]
+    let dim: Int
+}
+
 struct ComputeErrorResponse: Content {
     let success: Bool
     let message: String
@@ -274,6 +311,20 @@ actor VaporServer {
               -X POST http://&lt;YOUR IP&gt;:\(port)/synthesize \\
               -d '{"text":"Xin chào","lang":"vi-VN","rate":0.5}' \\
               --output speech.caf</code></pre>
+                <hr>
+                <h2>On-device Intelligence</h2>
+                <h3>Generate text via <code>llm</code> API (iOS 26):</h3>
+                <pre><code>curl -H "Content-Type: application/json" \\
+              -X POST http://&lt;YOUR IP&gt;:\(port)/llm \\
+              -d '{"prompt":"Tóm tắt Điều 5 trong 3 ý","system":"Bạn là trợ lý pháp luật Việt Nam","max":256}'</code></pre>
+                <h3>Extract entities via <code>ner</code> API:</h3>
+                <pre><code>curl -H "Content-Type: application/json" \\
+              -X POST http://&lt;YOUR IP&gt;:\(port)/ner \\
+              -d '{"text":"Bộ Tài chính ban hành 255/2024/NĐ-CP, Điều 5 khoản 2."}'</code></pre>
+                <h3>Create a Vietnamese embedding via <code>embed</code> API:</h3>
+                <pre><code>curl -H "Content-Type: application/json" \\
+              -X POST http://&lt;YOUR IP&gt;:\(port)/embed \\
+              -d '{"text":"quy định về hóa đơn điện tử"}'</code></pre>
                 <hr>
                 <h3>OCR Test:</h3>
                 <form id="ocrForm" action="/upload" method="post" enctype="multipart/form-data">
@@ -552,6 +603,141 @@ actor VaporServer {
             } catch let error as SynthServiceError {
                 return try Self.jsonResponse(
                     .badRequest,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            } catch {
+                return try Self.jsonResponse(
+                    .internalServerError,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
+        // POST /llm
+        app.on(.POST, "llm", body: .collect(maxSize: "2mb")) { req async throws -> Response in
+            let payload: LLMRequestBody
+            do {
+                payload = try req.content.decode(LLMRequestBody.self)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(
+                        success: false,
+                        message: "Expected JSON fields: prompt, system (optional), max (optional)"
+                    )
+                )
+            }
+
+            guard #available(iOS 26.0, *) else {
+                return try Self.jsonResponse(
+                    .serviceUnavailable,
+                    ComputeErrorResponse(
+                        success: false,
+                        message: "Foundation Models requires iOS 26 or later"
+                    )
+                )
+            }
+
+            do {
+                let text = try await LLMService.shared.respond(
+                    prompt: payload.prompt,
+                    system: payload.system,
+                    maximumTokens: payload.max
+                )
+                return try Self.jsonResponse(
+                    .ok,
+                    LLMResponse(success: true, text: text)
+                )
+            } catch let error as LLMServiceError {
+                let status: HTTPResponseStatus
+                switch error {
+                case .emptyPrompt, .invalidMaximumTokens:
+                    status = .badRequest
+                case .unavailable:
+                    status = .serviceUnavailable
+                }
+                return try Self.jsonResponse(
+                    status,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            } catch {
+                return try Self.jsonResponse(
+                    .internalServerError,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
+        // POST /ner
+        app.on(.POST, "ner", body: .collect(maxSize: "2mb")) { req async throws -> Response in
+            let payload: NERRequestBody
+            do {
+                payload = try req.content.decode(NERRequestBody.self)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "Expected JSON field: text")
+                )
+            }
+
+            do {
+                let output = try await NERService.shared.extract(from: payload.text)
+                return try Self.jsonResponse(
+                    .ok,
+                    NERResponse(
+                        success: true,
+                        entities: output.entities.map {
+                            NEREntityResponse(text: $0.text, type: $0.type)
+                        },
+                        so_hieu: output.documentNumbers,
+                        dieu_khoan: output.legalReferences
+                    )
+                )
+            } catch let error as NERServiceError {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            } catch {
+                return try Self.jsonResponse(
+                    .internalServerError,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
+        // POST /embed
+        app.on(.POST, "embed", body: .collect(maxSize: "2mb")) { req async throws -> Response in
+            let payload: EmbedRequestBody
+            do {
+                payload = try req.content.decode(EmbedRequestBody.self)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "Expected JSON field: text")
+                )
+            }
+
+            do {
+                let output = try await EmbeddingService.shared.embed(payload.text)
+                return try Self.jsonResponse(
+                    .ok,
+                    EmbedResponse(
+                        success: true,
+                        vector: output.vector,
+                        dim: output.dimension
+                    )
+                )
+            } catch let error as EmbeddingServiceError {
+                let status: HTTPResponseStatus
+                switch error {
+                case .emptyText:
+                    status = .badRequest
+                case .unsupportedVietnamese:
+                    status = .notImplemented
+                }
+                return try Self.jsonResponse(
+                    status,
                     ComputeErrorResponse(success: false, message: error.localizedDescription)
                 )
             } catch {
