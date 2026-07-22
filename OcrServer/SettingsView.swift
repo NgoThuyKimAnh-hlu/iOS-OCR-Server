@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State var keepAliveEnabled = Settings.shared.keepAliveEnabled
     @State var adminToken = Settings.shared.adminToken
     @State var improveEnabled = Settings.shared.improveEnabled
+    @State var debugVerbose = Settings.shared.debugVerbose
     
     var body: some View {
         NavigationView {
@@ -41,6 +42,11 @@ struct SettingsView: View {
                             icon: "wand.and.stars",
                             title: "Auto-improve OCR",
                             isOn: $improveEnabled
+                        )
+                        SettingsRow2(
+                            icon: "ladybug",
+                            title: "Verbose OCR debug",
+                            isOn: $debugVerbose
                         )
                     }
                     Section("Server") {
@@ -124,6 +130,9 @@ struct SettingsView: View {
             }
             .onChange(of: improveEnabled) { oldValue, newValue in
                 Settings.shared.improveEnabled = newValue
+            }
+            .onChange(of: debugVerbose) { oldValue, newValue in
+                Settings.shared.debugVerbose = newValue
             }
         }
     }

@@ -67,7 +67,9 @@ struct OCRImprovementResult: Sendable {
     let visionMilliseconds: Double
     let multipassMilliseconds: Double
     let correctMilliseconds: Double
+    let totalMilliseconds: Double
     let pack: DomainPackSelection
+    let rawVisionLines: [OCRVisionLine]
     let visionLines: [OCRVisionLine]
     let correctionTrace: [OCRCorrectionTraceItem]
 }
@@ -367,6 +369,7 @@ actor OCRImprovementService {
         configuration: OCRImprovementConfiguration,
         collectTrace: Bool
     ) async throws -> OCRImprovementResult? {
+        let pipelineStarted = DispatchTime.now().uptimeNanoseconds
         let pack = try await DomainPackManager.shared.select(metadata: metadata)
         let recognizer = TextRecognizer(
             recognitionLevel: recognitionLevel,
@@ -436,15 +439,15 @@ actor OCRImprovementService {
         var correctionCount = 0
         var correctionTrace: [OCRCorrectionTraceItem] = []
         var correctMilliseconds = 0.0
-        if improve {
+        if improve || collectTrace {
             let started = DispatchTime.now().uptimeNanoseconds
             let correction = try await VNLegalCorrector.shared.correct(
                 textBeforeCorrection,
-                groups: configuration.correctorGroups,
+                groups: improve ? configuration.correctorGroups : [],
                 collectTrace: collectTrace
             )
-            correctedText = correction.text
-            correctionCount = correction.correctionsApplied
+            correctedText = improve ? correction.text : textBeforeCorrection
+            correctionCount = improve ? correction.correctionsApplied : 0
             correctionTrace = correction.trace
             correctMilliseconds = Self.elapsedMilliseconds(since: started)
             if correctionCount > 0 {
@@ -485,7 +488,9 @@ actor OCRImprovementService {
             visionMilliseconds: initial.visionMilliseconds,
             multipassMilliseconds: multipassMilliseconds,
             correctMilliseconds: correctMilliseconds,
+            totalMilliseconds: Self.elapsedMilliseconds(since: pipelineStarted),
             pack: pack,
+            rawVisionLines: initial.lines,
             visionLines: selectedVision.lines,
             correctionTrace: correctionTrace
         )

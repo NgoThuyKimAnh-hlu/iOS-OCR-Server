@@ -79,6 +79,15 @@ def post_image(base_url: str, endpoint: str, path: Path, raw: bool, token: str) 
         raise RuntimeError(f"HTTP {error.code}: {detail}") from error
 
 
+def get_health(base_url: str) -> dict[str, Any]:
+    request = urllib.request.Request(
+        f"{base_url.rstrip('/')}/health",
+        headers={"Accept": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return json.load(response)
+
+
 def resolve_manifest_path(project_root: Path, value: str) -> Path:
     path = Path(value)
     return path if path.is_absolute() else project_root / path
@@ -116,6 +125,11 @@ def main() -> int:
     if not rows:
         raise SystemExit("No authoritative rows found in the manifest")
 
+    health = get_health(base_url)
+    print(
+        f"server={base_url} build={health.get('build_version') or health.get('version') or 'unknown'} "
+        f"improve={health.get('ocr_improve', {}).get('enabled')}"
+    )
     total_raw_edits = total_improved_edits = total_chars = 0
     regressions = 0
     print("page                                      CER_raw  CER_improved    delta  PC_pass2 flags")

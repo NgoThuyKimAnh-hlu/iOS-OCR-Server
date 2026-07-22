@@ -37,6 +37,7 @@ struct ServerHealthResponse: Content, Sendable {
     let uptime_s: Int
     let port: Int
     let version: String
+    let build_version: String
     let requests_total: Int
     let requests_ok: Int
     let requests_fail: Int
@@ -53,6 +54,7 @@ struct ServerStatsResponse: Content, Sendable {
     let uptime_s: Int
     let port: Int
     let version: String
+    let build_version: String
     let requests_total: Int
     let requests_ok: Int
     let requests_fail: Int
@@ -150,18 +152,14 @@ final class ServerTelemetry: ObservableObject {
         let level = device.batteryLevel >= 0
             ? Int((device.batteryLevel * 100).rounded())
             : nil
-        let shortVersion = (
-            Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        ) ?? "Unknown"
-        let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "Unknown"
-
         return ServerHealthResponse(
             status: "ok",
             uptime_s: serverStartedAt.map {
                 max(0, Int(Date().timeIntervalSince($0)))
             } ?? 0,
             port: port,
-            version: "\(shortVersion) (\(build))",
+            version: BuildInfo.versionStamp,
+            build_version: BuildInfo.versionStamp,
             requests_total: requestsTotal,
             requests_ok: requestsOK,
             requests_fail: requestsFail,
@@ -191,6 +189,7 @@ final class ServerTelemetry: ObservableObject {
             uptime_s: health.uptime_s,
             port: health.port,
             version: health.version,
+            build_version: health.build_version,
             requests_total: health.requests_total,
             requests_ok: health.requests_ok,
             requests_fail: health.requests_fail,
@@ -201,6 +200,21 @@ final class ServerTelemetry: ObservableObject {
             mem_free_mb: health.mem_free_mb,
             ocr_improve: health.ocr_improve,
             logs: recentLogs(limit: 20)
+        )
+    }
+
+    func debugDeviceSnapshot() -> OCRDebugDeviceSnapshot {
+        let device = UIDevice.current
+        let level = device.batteryLevel >= 0
+            ? Int((device.batteryLevel * 100).rounded())
+            : nil
+        return OCRDebugDeviceSnapshot(
+            thermal: Self.thermalStateName(ProcessInfo.processInfo.thermalState),
+            mem_free_mb: Self.freeMemoryMegabytes(),
+            battery: ServerBatteryStatus(
+                level: level,
+                state: Self.batteryStateName(device.batteryState)
+            )
         )
     }
 

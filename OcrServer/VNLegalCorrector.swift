@@ -7,7 +7,7 @@ import Compression
 import Foundation
 import Vapor
 
-enum CorrectorGroup: String, CaseIterable, Codable, Sendable {
+enum CorrectorGroup: String, CaseIterable, Codable, Sendable, Hashable {
     case allcapsDiacritic = "allcaps_diacritic"
     case undiacriticMap = "undiacritic_map"
     case legalIDNormalize = "legalid_normalize"
@@ -140,7 +140,9 @@ actor VNLegalCorrector {
         return OCRCorrectionResult(
             text: output,
             correctionsApplied: applied,
-            trace: trace
+            trace: collectTrace
+                ? completeTrace(original: text, corrected: output, stageTrace: trace)
+                : []
         )
     }
 
@@ -181,14 +183,29 @@ actor VNLegalCorrector {
                 output.replaceSubrange(range, with: replacement)
                 applied += 1
                 if collectTrace {
-                    trace.append(
-                        OCRCorrectionTraceItem(
-                            token_raw: original,
-                            token_out: replacement,
-                            rule_id: "\(rule.rule_id):\(rule.source)",
-                            action: allCaps ? "diacritized" : "normalized"
+                    let originalWords = original.split(whereSeparator: \.isWhitespace).map(String.init)
+                    let replacementWords = replacement.split(whereSeparator: \.isWhitespace).map(String.init)
+                    if originalWords.count == replacementWords.count {
+                        for (sourceWord, targetWord) in zip(originalWords, replacementWords) {
+                            trace.append(
+                                OCRCorrectionTraceItem(
+                                    token_raw: sourceWord,
+                                    token_out: targetWord,
+                                    rule_id: "\(rule.rule_id):\(rule.source)",
+                                    action: allCaps ? "diacritized" : "normalized"
+                                )
+                            )
+                        }
+                    } else {
+                        trace.append(
+                            OCRCorrectionTraceItem(
+                                token_raw: original,
+                                token_out: replacement,
+                                rule_id: "\(rule.rule_id):\(rule.source)",
+                                action: allCaps ? "diacritized" : "normalized"
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
@@ -370,6 +387,57 @@ actor VNLegalCorrector {
                 isWord: value.unicodeScalars.first.map(Self.isVietnameseLetter) ?? false
             )
         }
+    }
+
+    private func completeTrace(
+        original: String,
+        corrected: String,
+        stageTrace: [OCRCorrectionTraceItem]
+    ) -> [OCRCorrectionTraceItem] {
+        let originalWords = tokenize(original).filter(\.isWord).map(\.text)
+        let correctedWords = tokenize(corrected).filter(\.isWord).map(\.text)
+        guard originalWords.count == correctedWords.count else {
+            return stageTrace + correctedWords.map {
+                OCRCorrectionTraceItem(
+                    token_raw: $0,
+                    token_out: $0,
+                    rule_id: "none",
+                    action: "kept"
+                )
+            }
+        }
+
+        var used = Set<Int>()
+        var result: [OCRCorrectionTraceItem] = []
+        for (source, target) in zip(originalWords, correctedWords) {
+            if let index = stageTrace.indices.first(where: {
+                !used.contains($0)
+                    && stageTrace[$0].token_raw == source
+                    && stageTrace[$0].token_out == target
+            }) {
+                used.insert(index)
+                result.append(stageTrace[index])
+            } else if source == target,
+                      let ambiguousIndex = stageTrace.indices.first(where: {
+                        !used.contains($0)
+                            && stageTrace[$0].token_raw == source
+                            && stageTrace[$0].action == "skipped_ambiguous"
+                      }) {
+                used.insert(ambiguousIndex)
+                result.append(stageTrace[ambiguousIndex])
+            } else {
+                result.append(
+                    OCRCorrectionTraceItem(
+                        token_raw: source,
+                        token_out: target,
+                        rule_id: source == target ? "none" : "pipeline",
+                        action: source == target ? "kept" : "normalized"
+                    )
+                )
+            }
+        }
+        result.append(contentsOf: stageTrace.indices.filter { !used.contains($0) }.map { stageTrace[$0] })
+        return result
     }
 
     private func loadCorrectionMap() throws -> [String: String] {

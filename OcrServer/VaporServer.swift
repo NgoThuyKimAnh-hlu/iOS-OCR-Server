@@ -363,6 +363,12 @@ struct AdminSettingsResponse: Content, Sendable {
     let http_port: Int
     let admin_token_configured: Bool
     let improve: Bool
+    let confidence_threshold: Double
+    let multipass: Bool
+    let roi_upscale: Double
+    let corrector_groups: [String]
+    let active_pack: String
+    let debug_verbose: Bool
 }
 
 struct AdminSettingsPatch: Content, Sendable {
@@ -373,6 +379,12 @@ struct AdminSettingsPatch: Content, Sendable {
     let http_port: Int?
     let admin_token: String?
     let improve: Bool?
+    let confidence_threshold: Double?
+    let multipass: Bool?
+    let roi_upscale: Double?
+    let corrector_groups: [String]?
+    let active_pack: String?
+    let debug_verbose: Bool?
 }
 
 struct AdminApplyResponse: Content, Sendable {
@@ -396,6 +408,10 @@ private enum AdminSettingsError: LocalizedError {
     case invalidRecognitionLevel
     case pinnedPort
     case emptyPatch
+    case invalidConfidenceThreshold
+    case invalidROIUpscale
+    case invalidCorrectorGroups
+    case invalidActivePack
 
     var errorDescription: String? {
         switch self {
@@ -405,6 +421,14 @@ private enum AdminSettingsError: LocalizedError {
             return "http_port is pinned to 8000"
         case .emptyPatch:
             return "No supported setting was provided"
+        case .invalidConfidenceThreshold:
+            return "confidence_threshold must be between 0.05 and 0.99"
+        case .invalidROIUpscale:
+            return "roi_upscale must be between 1.0 and 4.0"
+        case .invalidCorrectorGroups:
+            return "corrector_groups contains an unknown rule group"
+        case .invalidActivePack:
+            return "active_pack must be auto, none, minimal, legal, tax, or customs"
         }
     }
 }
@@ -651,6 +675,110 @@ actor VaporServer {
             return try Self.jsonResponse(.ok, AdminLogResponse(logs: logs))
         }
 
+        app.on(.POST, "debug", "ocr", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
+            try await Self.requireDebugEnabled()
+            try await Self.requireAdminToken(request: req)
+            guard let self else { throw Abort(.internalServerError) }
+
+            let upload: OCRUploadPayload
+            do {
+                upload = try req.content.decode(OCRUploadPayload.self)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "Missing or empty 'file' part")
+                )
+            }
+            guard upload.file.data.readableBytes > 0 else {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "Missing or empty 'file' part")
+                )
+            }
+
+            let options: OCRRequestOptions
+            do {
+                options = try Self.requestOptions(from: req)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+
+            let data = Self.byteBufferToData(upload.file.data)
+            guard !Self.isPDF(data) else {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "/debug/ocr accepts one image, not PDF")
+                )
+            }
+            let processed: RectifiedImage
+            if options.rectify == 1 {
+                processed = await ImageProcessingService.shared.rectify(data: data)
+            } else {
+                processed = RectifiedImage(data: data, rectified: false)
+            }
+            let recognitionLevel = await self.recognitionLevel
+            let usesLanguageCorrection = await self.usesLanguageCorrection
+            let automaticallyDetectsLanguage = await self.automaticallyDetectsLanguage
+            let runtime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
+            let improve = Self.improveRequested(options: options, runtime: runtime)
+            let metadata = Self.domainMetadata(
+                options: options,
+                upload: upload,
+                activePack: runtime.activePack
+            )
+
+            do {
+                guard let result = try await OCRImprovementService.shared.processImage(
+                    data: processed.data,
+                    recognitionLevel: recognitionLevel,
+                    usesLanguageCorrection: usesLanguageCorrection,
+                    automaticallyDetectsLanguage: automaticallyDetectsLanguage,
+                    metadata: metadata,
+                    improve: improve,
+                    configuration: runtime.improvementConfiguration,
+                    collectTrace: true
+                ) else {
+                    return try Self.jsonResponse(
+                        .internalServerError,
+                        ComputeErrorResponse(success: false, message: "OCR failed")
+                    )
+                }
+                let trace = await OCRDebugTraceFactory.make(
+                    endpoint: "/debug/ocr",
+                    result: result,
+                    runtime: runtime,
+                    improve: improve,
+                    recognitionLevel: recognitionLevel == .fast ? "Fast" : "Accurate",
+                    usesLanguageCorrection: usesLanguageCorrection,
+                    automaticallyDetectsLanguage: automaticallyDetectsLanguage
+                )
+                await OCRDebugStore.shared.append(trace)
+                return try Self.jsonResponse(.ok, trace)
+            } catch {
+                return try Self.jsonResponse(
+                    Self.ocrErrorStatus(error),
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
+        app.get("debug", "last") { req async throws -> Response in
+            try await Self.requireDebugEnabled()
+            try await Self.requireAdminToken(request: req)
+            let limit = (try? req.query.get(Int.self, at: "n")) ?? 10
+            guard (1...30).contains(limit) else {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "n must be between 1 and 30")
+                )
+            }
+            let traces = await OCRDebugStore.shared.recent(limit: limit)
+            return try Self.jsonResponse(.ok, OCRDebugLastResponse(traces: traces))
+        }
+
         // GET /
         app.get { [weak self] req async throws -> Response in
             guard let self else { throw Abort(.internalServerError) }
@@ -793,6 +921,10 @@ actor VaporServer {
                 <code>?improve=0</code> for the uncorrected Vision text. Optional
                 <code>pack=minimal|legal|tax|customs|none</code> and metadata fields
                 <code>loai_van_ban</code>, <code>co_quan</code>, <code>nam</code> select a small domain pack.</p>
+                <p>Debug tuning: <code>POST /debug/ocr</code> returns the full top-3,
+                corrector, quality, timing, device, and config trace;
+                <code>GET /debug/last?n=10</code> returns recent traces. Both honor the
+                optional admin token and the live <code>debug_verbose</code> setting.</p>
                 <h3>Sequential image batch:</h3>
                 <pre><code>curl -H "Accept: application/json" \\
               -X POST http://&lt;YOUR IP&gt;:\(port)/batch \\
@@ -881,8 +1013,13 @@ actor VaporServer {
             let usesLanguageCorrection = await self.usesLanguageCorrection
             let automaticallyDetectsLanguage = await self.automaticallyDetectsLanguage
             let data = Self.byteBufferToData(upload.file.data)
-            let improve = await Self.improveRequested(options: options)
-            let metadata = Self.domainMetadata(options: options, upload: upload)
+            let runtime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
+            let improve = Self.improveRequested(options: options, runtime: runtime)
+            let metadata = Self.domainMetadata(
+                options: options,
+                upload: upload,
+                activePack: runtime.activePack
+            )
 
             if Self.isPDF(data) {
                 do {
@@ -909,8 +1046,21 @@ actor VaporServer {
                             metadata: metadata,
                             improve: improve,
                             pageNumber: page.pageNumber,
-                            pageCount: rendered.totalPageCount
+                            pageCount: rendered.totalPageCount,
+                            configuration: runtime.improvementConfiguration,
+                            collectTrace: runtime.debugVerbose
                         )
+                        if let result {
+                            await Self.recordDebugTraceIfNeeded(
+                                endpoint: "/upload?page=\(page.pageNumber)",
+                                result: result,
+                                runtime: runtime,
+                                improve: improve,
+                                recognitionLevel: recognitionLevel,
+                                usesLanguageCorrection: usesLanguageCorrection,
+                                automaticallyDetectsLanguage: automaticallyDetectsLanguage
+                            )
+                        }
                         pages.append(
                             PDFUploadPageResponse(
                                 page: page.pageNumber,
@@ -955,12 +1105,25 @@ actor VaporServer {
                     usesLanguageCorrection: usesLanguageCorrection,
                     automaticallyDetectsLanguage: automaticallyDetectsLanguage,
                     metadata: metadata,
-                    improve: improve
+                    improve: improve,
+                    configuration: runtime.improvementConfiguration,
+                    collectTrace: runtime.debugVerbose
                 )
             } catch {
                 return try Self.jsonResponse(
                     Self.ocrErrorStatus(error),
                     ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+            if let result {
+                await Self.recordDebugTraceIfNeeded(
+                    endpoint: "/upload",
+                    result: result,
+                    runtime: runtime,
+                    improve: improve,
+                    recognitionLevel: recognitionLevel,
+                    usesLanguageCorrection: usesLanguageCorrection,
+                    automaticallyDetectsLanguage: automaticallyDetectsLanguage
                 )
             }
             
@@ -1619,8 +1782,13 @@ actor VaporServer {
             let usesLanguageCorrection = await self.usesLanguageCorrection
             let automaticallyDetectsLanguage = await self.automaticallyDetectsLanguage
             let data = Self.byteBufferToData(upload.file.data)
-            let improve = await Self.improveRequested(options: options)
-            let metadata = Self.domainMetadata(options: options, upload: upload)
+            let runtime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
+            let improve = Self.improveRequested(options: options, runtime: runtime)
+            let metadata = Self.domainMetadata(
+                options: options,
+                upload: upload,
+                activePack: runtime.activePack
+            )
 
             if #available(iOS 26, *) {
                 let docRecognizer = DocRecognizer(
@@ -1662,8 +1830,21 @@ actor VaporServer {
                                 metadata: metadata,
                                 improve: improve,
                                 pageNumber: page.pageNumber,
-                                pageCount: rendered.totalPageCount
+                                pageCount: rendered.totalPageCount,
+                                configuration: runtime.improvementConfiguration,
+                                collectTrace: runtime.debugVerbose
                             )
+                            if let result {
+                                await Self.recordDebugTraceIfNeeded(
+                                    endpoint: "/docOCR?page=\(page.pageNumber)",
+                                    result: result,
+                                    runtime: runtime,
+                                    improve: improve,
+                                    recognitionLevel: recognitionLevel,
+                                    usesLanguageCorrection: usesLanguageCorrection,
+                                    automaticallyDetectsLanguage: automaticallyDetectsLanguage
+                                )
+                            }
                             pages.append(
                                 PDFDocOCRPageResponse(
                                     page: page.pageNumber,
@@ -1713,12 +1894,25 @@ actor VaporServer {
                         usesLanguageCorrection: usesLanguageCorrection,
                         automaticallyDetectsLanguage: automaticallyDetectsLanguage,
                         metadata: metadata,
-                        improve: improve
+                        improve: improve,
+                        configuration: runtime.improvementConfiguration,
+                        collectTrace: runtime.debugVerbose
                     )
                 } catch {
                     return try Self.jsonResponse(
                         Self.ocrErrorStatus(error),
                         ComputeErrorResponse(success: false, message: error.localizedDescription)
+                    )
+                }
+                if let result {
+                    await Self.recordDebugTraceIfNeeded(
+                        endpoint: "/docOCR",
+                        result: result,
+                        runtime: runtime,
+                        improve: improve,
+                        recognitionLevel: recognitionLevel,
+                        usesLanguageCorrection: usesLanguageCorrection,
+                        automaticallyDetectsLanguage: automaticallyDetectsLanguage
                     )
                 }
 
@@ -1787,6 +1981,13 @@ actor VaporServer {
         }
     }
 
+    private static func requireDebugEnabled() async throws {
+        let enabled = await MainActor.run { Settings.shared.debugVerbose }
+        guard enabled else {
+            throw Abort(.forbidden, reason: "OCR debug mode is disabled")
+        }
+    }
+
     @MainActor
     private static func adminSettingsSnapshot() -> AdminSettingsResponse {
         let settings = Settings.shared
@@ -1799,7 +2000,13 @@ actor VaporServer {
             admin_token_configured: !settings.adminToken
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .isEmpty,
-            improve: settings.improveEnabled
+            improve: settings.improveEnabled,
+            confidence_threshold: settings.confidenceThreshold,
+            multipass: settings.multipassEnabled,
+            roi_upscale: settings.roiUpscale,
+            corrector_groups: settings.correctorGroupNames,
+            active_pack: settings.activePack,
+            debug_verbose: settings.debugVerbose
         )
     }
 
@@ -1809,13 +2016,47 @@ actor VaporServer {
         var applied: [String] = []
         var requiresRestart = false
 
+        let normalizedRecognitionLevel: String?
         if let value = patch.recognition_level {
-            let normalized: String
             switch value.lowercased() {
-            case "accurate": normalized = "Accurate"
-            case "fast": normalized = "Fast"
+            case "accurate": normalizedRecognitionLevel = "Accurate"
+            case "fast": normalizedRecognitionLevel = "Fast"
             default: throw AdminSettingsError.invalidRecognitionLevel
             }
+        } else {
+            normalizedRecognitionLevel = nil
+        }
+        if let value = patch.http_port, value != 8000 {
+            throw AdminSettingsError.pinnedPort
+        }
+        if let value = patch.confidence_threshold, !(0.05...0.99).contains(value) {
+            throw AdminSettingsError.invalidConfidenceThreshold
+        }
+        if let value = patch.roi_upscale, !(1.0...4.0).contains(value) {
+            throw AdminSettingsError.invalidROIUpscale
+        }
+        let validatedGroups: [String]?
+        if let value = patch.corrector_groups {
+            let groups = value.compactMap { CorrectorGroup(rawValue: $0) }
+            guard groups.count == value.count else {
+                throw AdminSettingsError.invalidCorrectorGroups
+            }
+            validatedGroups = Array(Set(groups.map(\.rawValue))).sorted()
+        } else {
+            validatedGroups = nil
+        }
+        let normalizedActivePack: String?
+        if let value = patch.active_pack {
+            let normalized = value.lowercased()
+            guard ["auto", "none", "minimal", "legal", "tax", "customs"].contains(normalized) else {
+                throw AdminSettingsError.invalidActivePack
+            }
+            normalizedActivePack = normalized
+        } else {
+            normalizedActivePack = nil
+        }
+
+        if let normalized = normalizedRecognitionLevel {
             requiresRestart = requiresRestart || settings.recognitionLevel != normalized
             settings.recognitionLevel = normalized
             applied.append("recognition_level")
@@ -1834,8 +2075,7 @@ actor VaporServer {
             KeepAliveService.shared.setEnabled(value)
             applied.append("keep_alive")
         }
-        if let value = patch.http_port {
-            guard value == 8000 else { throw AdminSettingsError.pinnedPort }
+        if patch.http_port != nil {
             settings.httpPort = 8000
             applied.append("http_port")
         }
@@ -1846,6 +2086,30 @@ actor VaporServer {
         if let value = patch.improve {
             settings.improveEnabled = value
             applied.append("improve")
+        }
+        if let value = patch.confidence_threshold {
+            settings.confidenceThreshold = value
+            applied.append("confidence_threshold")
+        }
+        if let value = patch.multipass {
+            settings.multipassEnabled = value
+            applied.append("multipass")
+        }
+        if let value = patch.roi_upscale {
+            settings.roiUpscale = value
+            applied.append("roi_upscale")
+        }
+        if let value = validatedGroups {
+            settings.correctorGroupNames = value
+            applied.append("corrector_groups")
+        }
+        if let value = normalizedActivePack {
+            settings.activePack = value
+            applied.append("active_pack")
+        }
+        if let value = patch.debug_verbose {
+            settings.debugVerbose = value
+            applied.append("debug_verbose")
         }
 
         guard !applied.isEmpty else { throw AdminSettingsError.emptyPatch }
@@ -1913,6 +2177,12 @@ actor VaporServer {
               <label class="check"><input id="correction" type="checkbox"> Language correction</label>
               <label class="check"><input id="detect" type="checkbox"> Auto-detect language</label>
               <label class="check"><input id="improve" type="checkbox"> Auto-improve OCR</label>
+              <label>Confidence threshold <input id="confidence" type="number" min="0.05" max="0.99" step="0.01"></label>
+              <label class="check"><input id="multipass" type="checkbox"> Quality-gated multipass</label>
+              <label>ROI upscale <input id="roiUpscale" type="number" min="1" max="4" step="0.25"></label>
+              <label>Active domain pack <select id="activePack"><option>auto</option><option>none</option><option>minimal</option><option>legal</option><option>tax</option><option>customs</option></select></label>
+              <label>Corrector groups (comma-separated) <input id="correctorGroups" type="text"></label>
+              <label class="check"><input id="debugVerbose" type="checkbox"> Verbose debug trace</label>
               <label class="check"><input id="keepalive" type="checkbox"> Keep alive</label>
               <div class="row"><button id="save">Apply settings</button><button id="toggleKeepalive">Toggle keep-alive</button></div>
               <button id="restart" class="danger">Restart server</button>
@@ -1931,14 +2201,14 @@ actor VaporServer {
               const [health,settings,log] = await Promise.all([api('/health'),api('/admin/settings'),api('/admin/log')]);
               $('health').textContent=health.status.toUpperCase()+' · '+health.uptime_s+'s';
               $('healthData').textContent=JSON.stringify(health,null,2);
-              $('level').value=settings.recognition_level; $('correction').checked=settings.language_correction; $('detect').checked=settings.automatically_detects_language; $('improve').checked=settings.improve; $('keepalive').checked=settings.keep_alive;
+              $('level').value=settings.recognition_level; $('correction').checked=settings.language_correction; $('detect').checked=settings.automatically_detects_language; $('improve').checked=settings.improve; $('confidence').value=settings.confidence_threshold; $('multipass').checked=settings.multipass; $('roiUpscale').value=settings.roi_upscale; $('activePack').value=settings.active_pack; $('correctorGroups').value=settings.corrector_groups.join(','); $('debugVerbose').checked=settings.debug_verbose; $('keepalive').checked=settings.keep_alive;
               $('logs').textContent=log.logs.slice().reverse().map(x=>`${x.timestamp} ${x.method.padEnd(8)} ${String(x.status).padStart(3)} ${x.duration_ms.toFixed(1).padStart(8)}ms ${x.path}`).join('\\n');
               message('');
             } catch(error) { message(error.message); }
           }
           $('remember').onclick=()=>{ localStorage.setItem('computeAdminToken',$('token').value); message('Current token saved in localStorage.'); };
           $('applyToken').onclick=async()=>{ try { const value=$('newToken').value; await api('/admin/settings',{method:'POST',body:JSON.stringify({admin_token:value})}); $('token').value=value; $('newToken').value=''; localStorage.setItem('computeAdminToken',value); message('Server token updated.'); } catch(error) { message(error.message); } };
-          $('save').onclick=async()=>{ try { await api('/admin/settings',{method:'POST',body:JSON.stringify({recognition_level:$('level').value,language_correction:$('correction').checked,automatically_detects_language:$('detect').checked,improve:$('improve').checked,keep_alive:$('keepalive').checked})}); message('Settings applied. Restart may follow.'); } catch(error) { message(error.message); } };
+          $('save').onclick=async()=>{ try { await api('/admin/settings',{method:'POST',body:JSON.stringify({recognition_level:$('level').value,language_correction:$('correction').checked,automatically_detects_language:$('detect').checked,improve:$('improve').checked,confidence_threshold:Number($('confidence').value),multipass:$('multipass').checked,roi_upscale:Number($('roiUpscale').value),active_pack:$('activePack').value,corrector_groups:$('correctorGroups').value.split(',').map(x=>x.trim()).filter(Boolean),debug_verbose:$('debugVerbose').checked,keep_alive:$('keepalive').checked})}); message('Settings applied. Restart may follow.'); } catch(error) { message(error.message); } };
           $('toggleKeepalive').onclick=async()=>{ try { await api('/admin/keepalive',{method:'POST',body:JSON.stringify({on:!$('keepalive').checked})}); await refresh(); } catch(error) { message(error.message); } };
           $('restart').onclick=async()=>{ try { await api('/admin/restart',{method:'POST',body:'{}'}); message('Restart requested.'); } catch(error) { message(error.message); } };
           refresh(); setInterval(refresh,5000);
@@ -1976,22 +2246,48 @@ actor VaporServer {
         return options
     }
 
-    private static func improveRequested(options: OCRRequestOptions) async -> Bool {
+    private static func improveRequested(
+        options: OCRRequestOptions,
+        runtime: OCRRuntimeSettingsSnapshot
+    ) -> Bool {
         if options.raw == 1 { return false }
         if let improve = options.improve { return improve == 1 }
-        return await MainActor.run { Settings.shared.improveEnabled }
+        return runtime.improveEnabled
     }
 
     private static func domainMetadata(
         options: OCRRequestOptions,
-        upload: OCRUploadPayload
+        upload: OCRUploadPayload,
+        activePack: String
     ) -> OCRDomainMetadata {
         OCRDomainMetadata(
             documentType: options.loai_van_ban ?? upload.loai_van_ban,
             agency: options.co_quan ?? upload.co_quan,
             year: options.nam ?? upload.nam,
-            requestedPack: options.pack ?? upload.pack
+            requestedPack: options.pack ?? upload.pack ?? activePack
         )
+    }
+
+    private static func recordDebugTraceIfNeeded(
+        endpoint: String,
+        result: OCRImprovementResult,
+        runtime: OCRRuntimeSettingsSnapshot,
+        improve: Bool,
+        recognitionLevel: RecognizeTextRequest.RecognitionLevel,
+        usesLanguageCorrection: Bool,
+        automaticallyDetectsLanguage: Bool
+    ) async {
+        guard runtime.debugVerbose else { return }
+        let trace = await OCRDebugTraceFactory.make(
+            endpoint: endpoint,
+            result: result,
+            runtime: runtime,
+            improve: improve,
+            recognitionLevel: recognitionLevel == .fast ? "Fast" : "Accurate",
+            usesLanguageCorrection: usesLanguageCorrection,
+            automaticallyDetectsLanguage: automaticallyDetectsLanguage
+        )
+        await OCRDebugStore.shared.append(trace)
     }
 
     private static func ocrErrorStatus(_ error: Error) -> HTTPResponseStatus {
