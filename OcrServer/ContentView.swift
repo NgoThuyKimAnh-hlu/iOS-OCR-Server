@@ -12,10 +12,8 @@ struct ContentView: View {
     @StateObject private var sampler = Sampler()
     @StateObject private var serviceMonitor = ServiceStatusMonitor()
 
-    @State private var showingReadme = false
     @State private var showingSettings = false
     @State private var showingMonitor = false
-    @State private var showingDonation = false
     @State private var copiedAddress = false
 
     private let serviceColumns = [
@@ -62,18 +60,12 @@ struct ContentView: View {
                         .foregroundStyle(ConsolePalette.muted)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                    }
-
                     Menu {
-                        Button("README", systemImage: "text.page") {
-                            showingReadme = true
+                        Button("Settings", systemImage: "gearshape.fill") {
+                            showingSettings = true
                         }
-                        Button("Donation", systemImage: "cup.and.saucer") {
-                            showingDonation = true
+                        Button("Monitor", systemImage: "gauge.with.dots.needle.50percent") {
+                            showingMonitor = true
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -83,14 +75,8 @@ struct ContentView: View {
         }
         .tint(ConsolePalette.teal)
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showingReadme) {
-            ReadmeView()
-        }
         .sheet(isPresented: $showingMonitor) {
             DashboardView()
-        }
-        .sheet(isPresented: $showingDonation) {
-            DonationView()
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView(serverManager: serverManager)
