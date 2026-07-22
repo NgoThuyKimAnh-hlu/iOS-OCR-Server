@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State var autoDetectLanguage = Settings.shared.automaticallyDetectsLanguage
     @State var keepAliveEnabled = Settings.shared.keepAliveEnabled
     @State var adminToken = Settings.shared.adminToken
+    @State var improveEnabled = Settings.shared.improveEnabled
     
     var body: some View {
         NavigationView {
@@ -36,6 +37,11 @@ struct SettingsView: View {
                         SettingsRow2(icon: "globe",
                                      title: String(localized:"Auto Detects Language"),
                                      isOn: $autoDetectLanguage)
+                        SettingsRow2(
+                            icon: "wand.and.stars",
+                            title: "Auto-improve OCR",
+                            isOn: $improveEnabled
+                        )
                     }
                     Section("Server") {
                         HStack(spacing: 12) {
@@ -115,6 +121,9 @@ struct SettingsView: View {
                 Settings.shared.adminToken = newValue.trimmingCharacters(
                     in: .whitespacesAndNewlines
                 )
+            }
+            .onChange(of: improveEnabled) { oldValue, newValue in
+                Settings.shared.improveEnabled = newValue
             }
         }
     }

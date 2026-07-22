@@ -195,6 +195,55 @@ actor ImageProcessingService {
         }
     }
 
+    func upscaledCrop(
+        data: Data,
+        normalizedBox: VisionNormalizedBox,
+        scale: Double
+    ) -> Data? {
+        guard let inputImage = CIImage(
+            data: data,
+            options: [.applyOrientationProperty: true]
+        ) else {
+            return nil
+        }
+
+        let extent = inputImage.extent
+        let paddingX = max(0.006, normalizedBox.width * 0.08)
+        let paddingY = max(0.006, normalizedBox.height * 0.25)
+        let normalizedCrop = CGRect(
+            x: max(0, normalizedBox.x - paddingX),
+            y: max(0, normalizedBox.y - paddingY),
+            width: min(1, normalizedBox.width + 2 * paddingX),
+            height: min(1, normalizedBox.height + 2 * paddingY)
+        )
+        let cropRect = CGRect(
+            x: extent.minX + normalizedCrop.minX * extent.width,
+            y: extent.minY + normalizedCrop.minY * extent.height,
+            width: normalizedCrop.width * extent.width,
+            height: normalizedCrop.height * extent.height
+        ).intersection(extent)
+        guard !cropRect.isNull, cropRect.width >= 8, cropRect.height >= 8 else {
+            return nil
+        }
+
+        let boundedScale = CGFloat(min(4, max(1, scale)))
+        let outputWidth = Int(ceil(cropRect.width * boundedScale))
+        let outputHeight = Int(ceil(cropRect.height * boundedScale))
+        guard outputWidth <= maximumDimension,
+              outputHeight <= maximumDimension,
+              outputWidth <= maximumPixelCount / max(1, outputHeight) else {
+            return nil
+        }
+
+        let outputImage = inputImage
+            .cropped(to: cropRect)
+            .transformed(by: CGAffineTransform(scaleX: boundedScale, y: boundedScale))
+        guard let image = ciContext.createCGImage(outputImage, from: outputImage.extent) else {
+            return nil
+        }
+        return Self.pngData(from: image)
+    }
+
     private static func pngData(from image: CGImage) -> Data? {
         guard let mutableData = CFDataCreateMutable(nil, 0),
               let destination = CGImageDestinationCreateWithData(

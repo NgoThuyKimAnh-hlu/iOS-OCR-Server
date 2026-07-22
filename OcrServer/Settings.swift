@@ -74,4 +74,15 @@ class Settings {
             UserDefaults.standard.set(newValue, forKey: "adminToken")
         }
     }
+
+    var improveEnabled: Bool {
+        get {
+            return (
+                UserDefaults.standard.object(forKey: "improveEnabled") as? Bool
+            ) ?? true
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "improveEnabled")
+        }
+    }
 }

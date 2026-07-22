@@ -10,11 +10,21 @@
 		25DD00182E574A5300796897 /* Vapor in Frameworks */ = {isa = PBXBuildFile; productRef = 25DD00172E574A5300796897 /* Vapor */; };
 		25DDFFCB2E4F698F00796897 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 25DDFFCA2E4F698E00796897 /* StoreKit.framework */; };
 		C0DE00032E70000100796897 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE00022E70000100796897 /* ZIPFoundation */; };
+		C0DE10012E80000100796897 /* correction_map.json.zlib in Resources */ = {isa = PBXBuildFile; fileRef = C0DE10112E80000100796897 /* correction_map.json.zlib */; };
+		C0DE10022E80000100796897 /* unigram.json.zlib in Resources */ = {isa = PBXBuildFile; fileRef = C0DE10122E80000100796897 /* unigram.json.zlib */; };
+		C0DE10032E80000100796897 /* safe_corrections.json in Resources */ = {isa = PBXBuildFile; fileRef = C0DE10132E80000100796897 /* safe_corrections.json */; };
+		C0DE10042E80000100796897 /* domain_packs.json in Resources */ = {isa = PBXBuildFile; fileRef = C0DE10142E80000100796897 /* domain_packs.json */; };
+		C0DE10052E80000100796897 /* resource_manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = C0DE10152E80000100796897 /* resource_manifest.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		25B2C6ED2E3CF13400B4A7C9 /* OcrServer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OcrServer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		25DDFFCA2E4F698E00796897 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
+		C0DE10112E80000100796897 /* correction_map.json.zlib */ = {isa = PBXFileReference; lastKnownFileType = file; path = correction_map.json.zlib; sourceTree = "<group>"; };
+		C0DE10122E80000100796897 /* unigram.json.zlib */ = {isa = PBXFileReference; lastKnownFileType = file; path = unigram.json.zlib; sourceTree = "<group>"; };
+		C0DE10132E80000100796897 /* safe_corrections.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = safe_corrections.json; sourceTree = "<group>"; };
+		C0DE10142E80000100796897 /* domain_packs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = domain_packs.json; sourceTree = "<group>"; };
+		C0DE10152E80000100796897 /* resource_manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = resource_manifest.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -43,6 +53,7 @@
 			isa = PBXGroup;
 			children = (
 				25B2C6EF2E3CF13400B4A7C9 /* OcrServer */,
+				C0DE10202E80000100796897 /* OCRResources */,
 				25DDFFC92E4F698E00796897 /* Frameworks */,
 				25B2C6EE2E3CF13400B4A7C9 /* Products */,
 			);
@@ -62,6 +73,18 @@
 				25DDFFCA2E4F698E00796897 /* StoreKit.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		C0DE10202E80000100796897 /* OCRResources */ = {
+			isa = PBXGroup;
+			children = (
+				C0DE10112E80000100796897 /* correction_map.json.zlib */,
+				C0DE10122E80000100796897 /* unigram.json.zlib */,
+				C0DE10132E80000100796897 /* safe_corrections.json */,
+				C0DE10142E80000100796897 /* domain_packs.json */,
+				C0DE10152E80000100796897 /* resource_manifest.json */,
+			);
+			path = OCRResources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -139,6 +162,11 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0DE10012E80000100796897 /* correction_map.json.zlib in Resources */,
+				C0DE10022E80000100796897 /* unigram.json.zlib in Resources */,
+				C0DE10032E80000100796897 /* safe_corrections.json in Resources */,
+				C0DE10042E80000100796897 /* domain_packs.json in Resources */,
+				C0DE10052E80000100796897 /* resource_manifest.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

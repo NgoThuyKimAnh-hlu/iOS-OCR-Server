@@ -23,6 +23,15 @@ struct ServerBatteryStatus: Content, Sendable {
     let state: String
 }
 
+struct OCRImproveHealthStatus: Content, Sendable {
+    let enabled: Bool
+    let correction_rules: Int
+    let unigram_entries: Int
+    let corrections_total: Int
+    let default_pack: String
+    let pack_version: String
+}
+
 struct ServerHealthResponse: Content, Sendable {
     let status: String
     let uptime_s: Int
@@ -36,6 +45,7 @@ struct ServerHealthResponse: Content, Sendable {
     let battery: ServerBatteryStatus
     let thermal: String
     let mem_free_mb: Int
+    let ocr_improve: OCRImproveHealthStatus
 }
 
 struct ServerStatsResponse: Content, Sendable {
@@ -51,6 +61,7 @@ struct ServerStatsResponse: Content, Sendable {
     let battery: ServerBatteryStatus
     let thermal: String
     let mem_free_mb: Int
+    let ocr_improve: OCRImproveHealthStatus
     let logs: [RequestLogEntry]
 }
 
@@ -62,6 +73,7 @@ final class ServerTelemetry: ObservableObject {
     @Published private(set) var requestsOK = 0
     @Published private(set) var requestsFail = 0
     @Published private(set) var autoRestarts = 0
+    @Published private(set) var ocrCorrectionsTotal = 0
     @Published private(set) var logs: [RequestLogEntry] = []
     @Published private(set) var serverStartedAt: Date?
 
@@ -125,6 +137,10 @@ final class ServerTelemetry: ObservableObject {
         recordSystemEvent(method: "WATCHDOG", path: reason, status: 0)
     }
 
+    func recordOCRCorrections(_ count: Int) {
+        ocrCorrectionsTotal += max(0, count)
+    }
+
     func recentLogs(limit: Int) -> [RequestLogEntry] {
         Array(logs.suffix(max(0, limit)))
     }
@@ -156,7 +172,15 @@ final class ServerTelemetry: ObservableObject {
                 state: Self.batteryStateName(device.batteryState)
             ),
             thermal: Self.thermalStateName(ProcessInfo.processInfo.thermalState),
-            mem_free_mb: Self.freeMemoryMegabytes()
+            mem_free_mb: Self.freeMemoryMegabytes(),
+            ocr_improve: OCRImproveHealthStatus(
+                enabled: Settings.shared.improveEnabled,
+                correction_rules: VNLegalCorrector.correctionRuleCount,
+                unigram_entries: VNLegalCorrector.unigramEntryCount,
+                corrections_total: ocrCorrectionsTotal,
+                default_pack: "minimal",
+                pack_version: "2026.07.22.1"
+            )
         )
     }
 
@@ -175,6 +199,7 @@ final class ServerTelemetry: ObservableObject {
             battery: health.battery,
             thermal: health.thermal,
             mem_free_mb: health.mem_free_mb,
+            ocr_improve: health.ocr_improve,
             logs: recentLogs(limit: 20)
         )
     }

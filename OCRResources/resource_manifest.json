@@ -1,0 +1,59 @@
+{
+  "correction_map": {
+    "bundle_bytes": 5504885,
+    "bundle_sha256": "ef0832a119e8401c2c42fa04de7a163793d8cda24cd226af77a384e3dc9fddbb",
+    "entries": 923186,
+    "raw_bytes": 33781915,
+    "source": "/mnt/d/AI Projects/Iphone OCR/engine/lexicon/correction_map.json",
+    "source_sha256": "7873a1d9ab038103d2bf2294d75da282da74aa435fdc6c6716b05582f7548f2c"
+  },
+  "domain_packs": {
+    "bundle_bytes": 19089,
+    "bundle_sha256": "13f49215ba086bb4b07a3c1160e7c48130324bbee35322a26eb7f4ffed135a4f",
+    "count": 4,
+    "packs": [
+      {
+        "id": "minimal",
+        "sha256": "4d14b1b446cc0f44f60fadfa93906d4dfe3515cd51b2dc102629f8505f0034f1",
+        "version": "2026.07.22.1",
+        "word_count": 146
+      },
+      {
+        "id": "legal",
+        "sha256": "78df9af91892f269d6c572c786378280772b3f3fc8f4714179c31f79e8399cae",
+        "version": "2026.07.22.1",
+        "word_count": 807
+      },
+      {
+        "id": "tax",
+        "sha256": "f6ca8da59a1d3398eeea17d640c45042067ca9300bd6e1c27432ab29ba16297e",
+        "version": "2026.07.22.1",
+        "word_count": 397
+      },
+      {
+        "id": "customs",
+        "sha256": "ef2c164e393bd97e06a881c306316684a236262e9f6d2383121a22ed09ed6cad",
+        "version": "2026.07.22.1",
+        "word_count": 389
+      }
+    ]
+  },
+  "excluded": [
+    "phrases.json"
+  ],
+  "generated_by": "tools/build_ios_ocr_resources.py",
+  "safe_corrections": {
+    "bundle_bytes": 22851,
+    "bundle_sha256": "cd49802c53d447a8bb1bfd079f45ccb142f0a603cbc16cb8b6d80b6c93f4cf10",
+    "entries": 216
+  },
+  "schema_version": 1,
+  "unigram": {
+    "bundle_bytes": 527201,
+    "bundle_sha256": "b42ec3691edb4fb0add9b19e5c3ff575327b8f402a27b7e37757ccccdf3db4df",
+    "entries": 97197,
+    "raw_bytes": 1364071,
+    "source": "/mnt/d/AI Projects/Iphone OCR/engine/lexicon/unigram.json",
+    "source_sha256": "561962a4834921b5677025c839ea6f9eb0edd1b12c6ef2258e705a7c33d99ca5"
+  }
+}
