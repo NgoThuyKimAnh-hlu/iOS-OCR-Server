@@ -289,6 +289,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "OCR Server";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to capture images for OCR.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Ứng dụng cần quyền mic để nhận dạng giọng nói.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Ứng dụng cần quyền nhận dạng giọng nói để chuyển âm thanh thành văn bản.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -322,6 +324,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "OCR Server";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to capture images for OCR.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Ứng dụng cần quyền mic để nhận dạng giọng nói.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Ứng dụng cần quyền nhận dạng giọng nói để chuyển âm thanh thành văn bản.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

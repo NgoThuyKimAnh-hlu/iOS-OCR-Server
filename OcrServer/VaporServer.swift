@@ -50,6 +50,36 @@ struct UploadResponse: Content {
     let ocr_boxes: [OCRBoxItem]
 }
 
+struct TranslateRequestBody: Content {
+    let text: String
+    let target: String
+    let source: String?
+}
+
+struct TranslateResponse: Content {
+    let success: Bool
+    let translated: String
+    let source: String
+    let target: String
+}
+
+struct TranscribeResponse: Content {
+    let success: Bool
+    let text: String
+    let locale: String
+}
+
+struct SynthesizeRequestBody: Content {
+    let text: String
+    let lang: String?
+    let rate: Float?
+}
+
+struct ComputeErrorResponse: Content {
+    let success: Bool
+    let message: String
+}
+
 actor VaporServer {
     private var app: Application?
     private var runTask: Task<Void, Never>?
@@ -194,7 +224,7 @@ actor VaporServer {
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>OCR Server</title>
+                <title>Apple Compute Server</title>
                 <style>
                     code {
                         background: #dadada;
@@ -223,12 +253,27 @@ actor VaporServer {
                 </style>
             </head>
             <body>
-                <h1>OCR Server</h1>
+                <h1>Apple Compute Server</h1>
                 <h3>Upload an image via <code>upload</code> API:</h3>
                 <pre><code>curl -H "Accept: application/json" \\
               -X POST http://&lt;YOUR IP&gt;:\(port)/upload \\
               -F "file=@01.png"</code></pre>
                 \(docOcrApiPre)
+                <hr>
+                <h2>Translation, Speech-to-Text, and Text-to-Speech</h2>
+                <h3>Translate text via <code>translate</code> API:</h3>
+                <pre><code>curl -H "Content-Type: application/json" \\
+              -X POST http://&lt;YOUR IP&gt;:\(port)/translate \\
+              -d '{"text":"Xin chào","source":"vi","target":"en"}'</code></pre>
+                <h3>Transcribe audio via <code>transcribe</code> API:</h3>
+                <pre><code>curl -H "Accept: application/json" \\
+              -X POST 'http://&lt;YOUR IP&gt;:\(port)/transcribe?locale=vi-VN' \\
+              -F "file=@speech.m4a"</code></pre>
+                <h3>Synthesize speech via <code>synthesize</code> API:</h3>
+                <pre><code>curl -H "Content-Type: application/json" \\
+              -X POST http://&lt;YOUR IP&gt;:\(port)/synthesize \\
+              -d '{"text":"Xin chào","lang":"vi-VN","rate":0.5}' \\
+              --output speech.caf</code></pre>
                 <hr>
                 <h3>OCR Test:</h3>
                 <form id="ocrForm" action="/upload" method="post" enctype="multipart/form-data">
@@ -355,6 +400,168 @@ actor VaporServer {
             }
         }
         
+        // POST /translate
+        app.on(.POST, "translate", body: .collect(maxSize: "2mb")) { req async throws -> Response in
+            let payload: TranslateRequestBody
+            do {
+                payload = try req.content.decode(TranslateRequestBody.self)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(
+                        success: false,
+                        message: "Expected JSON fields: text, target, source (optional)"
+                    )
+                )
+            }
+
+            do {
+                let output = try await TranslationService.shared.translate(
+                    text: payload.text,
+                    source: payload.source,
+                    target: payload.target
+                )
+                return try Self.jsonResponse(
+                    .ok,
+                    TranslateResponse(
+                        success: true,
+                        translated: output.translated,
+                        source: output.source,
+                        target: output.target
+                    )
+                )
+            } catch let error as TranslationServiceError {
+                let status: HTTPResponseStatus
+                switch error {
+                case .timedOut:
+                    status = .serviceUnavailable
+                case .emptyText, .missingTarget:
+                    status = .badRequest
+                }
+                return try Self.jsonResponse(
+                    status,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            } catch {
+                return try Self.jsonResponse(
+                    .internalServerError,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
+        // POST /transcribe
+        app.on(.POST, "transcribe", body: .collect(maxSize: "100mb")) { req async throws -> Response in
+            let contentType = (req.headers.first(name: .contentType) ?? "").lowercased()
+            let audioData: Data
+            let fileExtension: String
+
+            if contentType.contains("multipart/form-data") {
+                struct AudioUpload: Content { var file: File }
+
+                let upload: AudioUpload
+                do {
+                    upload = try req.content.decode(AudioUpload.self)
+                } catch {
+                    return try Self.jsonResponse(
+                        .badRequest,
+                        ComputeErrorResponse(success: false, message: "Missing or empty 'file' part")
+                    )
+                }
+
+                guard upload.file.data.readableBytes > 0 else {
+                    return try Self.jsonResponse(
+                        .badRequest,
+                        ComputeErrorResponse(success: false, message: "Missing or empty 'file' part")
+                    )
+                }
+
+                audioData = Self.byteBufferToData(upload.file.data)
+                fileExtension = URL(fileURLWithPath: upload.file.filename).pathExtension.lowercased()
+            } else {
+                guard let buffer = req.body.data, buffer.readableBytes > 0 else {
+                    return try Self.jsonResponse(
+                        .badRequest,
+                        ComputeErrorResponse(success: false, message: "Request body must contain audio data")
+                    )
+                }
+
+                audioData = Self.byteBufferToData(buffer)
+                fileExtension = Self.audioFileExtension(for: contentType)
+            }
+
+            let locale = (try? req.query.get(String.self, at: "locale")) ?? "vi-VN"
+
+            do {
+                let output = try await SpeechService.shared.transcribe(
+                    data: audioData,
+                    fileExtension: fileExtension,
+                    locale: locale
+                )
+                return try Self.jsonResponse(
+                    .ok,
+                    TranscribeResponse(success: true, text: output.text, locale: output.locale)
+                )
+            } catch let error as SpeechServiceError {
+                let status: HTTPResponseStatus
+                switch error {
+                case .authorizationDenied:
+                    status = .forbidden
+                case .recognizerUnavailable,
+                     .onDeviceRecognitionUnavailable,
+                     .recognitionFailed:
+                    status = .serviceUnavailable
+                }
+                return try Self.jsonResponse(
+                    status,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            } catch {
+                return try Self.jsonResponse(
+                    .internalServerError,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
+        // POST /synthesize
+        app.on(.POST, "synthesize", body: .collect(maxSize: "2mb")) { req async throws -> Response in
+            let payload: SynthesizeRequestBody
+            do {
+                payload = try req.content.decode(SynthesizeRequestBody.self)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(
+                        success: false,
+                        message: "Expected JSON fields: text, lang (optional), rate (optional)"
+                    )
+                )
+            }
+
+            do {
+                let audioData = try await SynthService.shared.synthesize(
+                    text: payload.text,
+                    language: payload.lang ?? "vi-VN",
+                    rate: payload.rate ?? 0.5
+                )
+                var headers = HTTPHeaders()
+                headers.add(name: .contentType, value: "audio/x-caf")
+                headers.add(name: .contentDisposition, value: "attachment; filename=\"speech.caf\"")
+                return Response(status: .ok, headers: headers, body: .init(data: audioData))
+            } catch let error as SynthServiceError {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            } catch {
+                return try Self.jsonResponse(
+                    .internalServerError,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
         // POST /docOCR（限制收集本文大小，可自行調整）
         app.on(.POST, "docOCR", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
             if #unavailable(iOS 26) {
@@ -478,6 +685,13 @@ actor VaporServer {
         s.replacingOccurrences(of: "&", with: "&amp;")
          .replacingOccurrences(of: "<", with: "&lt;")
          .replacingOccurrences(of: ">", with: "&gt;")
+    }
+
+    private static func audioFileExtension(for contentType: String) -> String {
+        if contentType.contains("wav") { return "wav" }
+        if contentType.contains("mpeg") || contentType.contains("mp3") { return "mp3" }
+        if contentType.contains("caf") { return "caf" }
+        return "m4a"
     }
 
     private static func htmlResponse(_ html: String, status: HTTPResponseStatus = .ok) -> Response {

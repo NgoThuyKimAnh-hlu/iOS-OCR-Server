@@ -13,9 +13,12 @@ struct OcrServerApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView(
-                serverManager: serverManager
-            )
+            ZStack {
+                ContentView(
+                    serverManager: serverManager
+                )
+                TranslationServiceHost(service: TranslationService.shared)
+            }
             .onAppear {
                 UIApplication.shared.isIdleTimerDisabled = true
             }
