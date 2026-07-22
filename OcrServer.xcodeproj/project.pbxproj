@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		25DD00182E574A5300796897 /* Vapor in Frameworks */ = {isa = PBXBuildFile; productRef = 25DD00172E574A5300796897 /* Vapor */; };
 		25DDFFCB2E4F698F00796897 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 25DDFFCA2E4F698E00796897 /* StoreKit.framework */; };
+		C0DE00032E70000100796897 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = C0DE00022E70000100796897 /* ZIPFoundation */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +32,7 @@
 			files = (
 				25DD00182E574A5300796897 /* Vapor in Frameworks */,
 				25DDFFCB2E4F698F00796897 /* StoreKit.framework in Frameworks */,
+				C0DE00032E70000100796897 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -83,6 +85,7 @@
 			name = OcrServer;
 			packageProductDependencies = (
 				25DD00172E574A5300796897 /* Vapor */,
+				C0DE00022E70000100796897 /* ZIPFoundation */,
 			);
 			productName = OcrServer;
 			productReference = 25B2C6ED2E3CF13400B4A7C9 /* OcrServer.app */;
@@ -119,6 +122,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				25DD00162E574A5300796897 /* XCRemoteSwiftPackageReference "vapor" */,
+				C0DE00012E70000100796897 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 25B2C6EE2E3CF13400B4A7C9 /* Products */;
@@ -380,6 +384,14 @@
 				minimumVersion = 4.115.1;
 			};
 		};
+		C0DE00012E70000100796897 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.20;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -387,6 +399,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 25DD00162E574A5300796897 /* XCRemoteSwiftPackageReference "vapor" */;
 			productName = Vapor;
+		};
+		C0DE00022E70000100796897 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0DE00012E70000100796897 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

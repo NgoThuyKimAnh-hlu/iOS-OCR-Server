@@ -112,6 +112,30 @@ struct EmbedResponse: Content {
     let dim: Int
 }
 
+struct CoreMLPredictRequestBody: Content {
+    let model_id: String
+    let inputs: [String: CoreMLJSONValue]
+}
+
+struct CoreMLModelResponse: Content {
+    let success: Bool
+    let model_id: String
+    let input: [CoreMLFeatureInfo]
+    let output: [CoreMLFeatureInfo]
+}
+
+struct CoreMLPredictResponse: Content {
+    let success: Bool
+    let outputs: [String: CoreMLJSONValue]
+    let compute: String
+    let inference_ms: Double
+}
+
+struct CoreMLDeleteResponse: Content {
+    let success: Bool
+    let model_id: String
+}
+
 struct ComputeErrorResponse: Content {
     let success: Bool
     let message: String
@@ -325,6 +349,24 @@ actor VaporServer {
                 <pre><code>curl -H "Content-Type: application/json" \\
               -X POST http://&lt;YOUR IP&gt;:\(port)/embed \\
               -d '{"text":"quy định về hóa đơn điện tử"}'</code></pre>
+                <hr>
+                <h2>Core ML Runner</h2>
+                <p>Endpoints: <code>coreml/upload</code>, <code>coreml/info</code>,
+                <code>coreml/predict</code>, and <code>coreml/delete</code>.</p>
+                <h3>Upload and load a Core ML model:</h3>
+                <pre><code>curl -H "Accept: application/json" \\
+              -X POST http://&lt;YOUR IP&gt;:\(port)/coreml/upload \\
+              -F "file=@VietnameseLegal.mlmodel"</code></pre>
+                <p>For directory-based <code>.mlpackage</code> or <code>.mlmodelc</code>, ZIP the
+                directory and preserve the original multipart filename.</p>
+                <pre><code>zip -qr VietnameseLegal.mlpackage.zip VietnameseLegal.mlpackage
+curl -H "Accept: application/json" \\
+              -X POST http://&lt;YOUR IP&gt;:\(port)/coreml/upload \\
+              -F "file=@VietnameseLegal.mlpackage.zip;filename=VietnameseLegal.mlpackage"</code></pre>
+                <h3>Run dynamic Core ML inference:</h3>
+                <pre><code>curl -H "Content-Type: application/json" \\
+              -X POST http://&lt;YOUR IP&gt;:\(port)/coreml/predict \\
+              -d '{"model_id":"vietnameselegal-HASH","inputs":{"input_ids":[[1,2,3,4]]}}'</code></pre>
                 <hr>
                 <h3>OCR Test:</h3>
                 <form id="ocrForm" action="/upload" method="post" enctype="multipart/form-data">
@@ -748,6 +790,159 @@ actor VaporServer {
             }
         }
 
+        // POST /coreml/upload
+        app.on(.POST, "coreml", "upload", body: .collect(maxSize: "500mb")) { req async throws -> Response in
+            struct ModelUpload: Content { var file: File }
+
+            let upload: ModelUpload
+            do {
+                upload = try req.content.decode(ModelUpload.self)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "Missing or empty 'file' part")
+                )
+            }
+
+            guard upload.file.data.readableBytes > 0 else {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "Missing or empty 'file' part")
+                )
+            }
+
+            do {
+                let info = try await CoreMLService.shared.upload(
+                    data: Self.byteBufferToData(upload.file.data),
+                    filename: upload.file.filename
+                )
+                return try Self.jsonResponse(
+                    .ok,
+                    CoreMLModelResponse(
+                        success: true,
+                        model_id: info.modelID,
+                        input: info.inputs,
+                        output: info.outputs
+                    )
+                )
+            } catch let error as CoreMLServiceError {
+                return try Self.jsonResponse(
+                    Self.coreMLStatus(for: error),
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            } catch {
+                return try Self.jsonResponse(
+                    .internalServerError,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
+        // GET /coreml/info?model_id=...
+        app.get("coreml", "info") { req async throws -> Response in
+            guard let modelID = try? req.query.get(String.self, at: "model_id"),
+                  !modelID.isEmpty else {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "Missing query parameter: model_id")
+                )
+            }
+
+            do {
+                let info = try await CoreMLService.shared.info(modelID: modelID)
+                return try Self.jsonResponse(
+                    .ok,
+                    CoreMLModelResponse(
+                        success: true,
+                        model_id: info.modelID,
+                        input: info.inputs,
+                        output: info.outputs
+                    )
+                )
+            } catch let error as CoreMLServiceError {
+                return try Self.jsonResponse(
+                    Self.coreMLStatus(for: error),
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            } catch {
+                return try Self.jsonResponse(
+                    .internalServerError,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
+        // POST /coreml/predict
+        app.on(.POST, "coreml", "predict", body: .collect(maxSize: "100mb")) { req async throws -> Response in
+            let payload: CoreMLPredictRequestBody
+            do {
+                payload = try req.content.decode(CoreMLPredictRequestBody.self)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(
+                        success: false,
+                        message: "Expected JSON fields: model_id, inputs"
+                    )
+                )
+            }
+
+            do {
+                let result = try await CoreMLService.shared.predict(
+                    modelID: payload.model_id,
+                    inputs: payload.inputs
+                )
+                return try Self.jsonResponse(
+                    .ok,
+                    CoreMLPredictResponse(
+                        success: true,
+                        outputs: result.outputs,
+                        compute: "neuralEngine/all",
+                        inference_ms: result.inferenceMilliseconds
+                    )
+                )
+            } catch let error as CoreMLServiceError {
+                return try Self.jsonResponse(
+                    Self.coreMLStatus(for: error),
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            } catch {
+                return try Self.jsonResponse(
+                    .internalServerError,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
+        // POST /coreml/delete?model_id=...
+        app.post("coreml", "delete") { req async throws -> Response in
+            guard let modelID = try? req.query.get(String.self, at: "model_id"),
+                  !modelID.isEmpty else {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "Missing query parameter: model_id")
+                )
+            }
+
+            do {
+                try await CoreMLService.shared.delete(modelID: modelID)
+                return try Self.jsonResponse(
+                    .ok,
+                    CoreMLDeleteResponse(success: true, model_id: modelID)
+                )
+            } catch let error as CoreMLServiceError {
+                return try Self.jsonResponse(
+                    Self.coreMLStatus(for: error),
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            } catch {
+                return try Self.jsonResponse(
+                    .internalServerError,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
         // POST /docOCR（限制收集本文大小，可自行調整）
         app.on(.POST, "docOCR", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
             if #unavailable(iOS 26) {
@@ -878,6 +1073,21 @@ actor VaporServer {
         if contentType.contains("mpeg") || contentType.contains("mp3") { return "mp3" }
         if contentType.contains("caf") { return "caf" }
         return "m4a"
+    }
+
+    private static func coreMLStatus(for error: CoreMLServiceError) -> HTTPResponseStatus {
+        switch error {
+        case .modelNotFound:
+            return .notFound
+        case .internalFailure:
+            return .internalServerError
+        case .invalidUpload,
+             .invalidModelID,
+             .missingInput,
+             .invalidInput,
+             .unsupportedFeatureType:
+            return .badRequest
+        }
     }
 
     private static func htmlResponse(_ html: String, status: HTTPResponseStatus = .ok) -> Response {
