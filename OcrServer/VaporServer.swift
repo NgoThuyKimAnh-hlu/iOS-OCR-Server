@@ -360,7 +360,7 @@ actor VaporServer {
                 <p>For directory-based <code>.mlpackage</code> or <code>.mlmodelc</code>, ZIP the
                 directory and preserve the original multipart filename.</p>
                 <pre><code>zip -qr VietnameseLegal.mlpackage.zip VietnameseLegal.mlpackage
-curl -H "Accept: application/json" \\
+                curl -H "Accept: application/json" \\
               -X POST http://&lt;YOUR IP&gt;:\(port)/coreml/upload \\
               -F "file=@VietnameseLegal.mlpackage.zip;filename=VietnameseLegal.mlpackage"</code></pre>
                 <h3>Run dynamic Core ML inference:</h3>
