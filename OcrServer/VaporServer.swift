@@ -221,6 +221,58 @@ struct ComputeErrorResponse: Content {
     let message: String
 }
 
+struct AdminSettingsResponse: Content, Sendable {
+    let recognition_level: String
+    let language_correction: Bool
+    let automatically_detects_language: Bool
+    let keep_alive: Bool
+    let http_port: Int
+    let admin_token_configured: Bool
+}
+
+struct AdminSettingsPatch: Content, Sendable {
+    let recognition_level: String?
+    let language_correction: Bool?
+    let automatically_detects_language: Bool?
+    let keep_alive: Bool?
+    let http_port: Int?
+    let admin_token: String?
+}
+
+struct AdminApplyResponse: Content, Sendable {
+    let applied: [String]
+    let restarted: Bool
+}
+
+struct AdminRestartResponse: Content, Sendable {
+    let ok: Bool
+}
+
+struct AdminKeepAliveRequest: Content, Sendable {
+    let on: Bool
+}
+
+struct AdminLogResponse: Content, Sendable {
+    let logs: [RequestLogEntry]
+}
+
+private enum AdminSettingsError: LocalizedError {
+    case invalidRecognitionLevel
+    case pinnedPort
+    case emptyPatch
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidRecognitionLevel:
+            return "recognition_level must be Accurate or Fast"
+        case .pinnedPort:
+            return "http_port is pinned to 8000"
+        case .emptyPatch:
+            return "No supported setting was provided"
+        }
+    }
+}
+
 private struct OCRRequestOptions: Decodable {
     let dpi: Int?
     let max_pages: Int?
@@ -340,7 +392,7 @@ actor VaporServer {
             NotificationCenter.default.post(
                 name: .vaporServerShouldRestart,
                 object: nil,
-                userInfo: ["reason": "crash"]
+                userInfo: ["reason": "/server/crash", "automatic": true]
             )
         }
     }
@@ -370,6 +422,83 @@ actor VaporServer {
                 )
             }
             return try Self.jsonResponse(.ok, stats)
+        }
+
+        app.get("admin") { [weak self] req async throws -> Response in
+            guard let self else { throw Abort(.internalServerError) }
+            return Self.htmlResponse(Self.adminHTML(port: await self.port))
+        }
+
+        app.get("admin", "settings") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            let settings = await MainActor.run { Self.adminSettingsSnapshot() }
+            return try Self.jsonResponse(.ok, settings)
+        }
+
+        app.post("admin", "settings") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+
+            let patch: AdminSettingsPatch
+            do {
+                patch = try req.content.decode(AdminSettingsPatch.self)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(
+                        success: false,
+                        message: "Expected a partial settings JSON object"
+                    )
+                )
+            }
+
+            do {
+                let outcome = try await MainActor.run {
+                    try Self.applyAdminSettings(patch)
+                }
+                if outcome.restarted {
+                    Self.scheduleServerRestart(reason: "/admin/settings")
+                }
+                return try Self.jsonResponse(.ok, outcome)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+        }
+
+        app.post("admin", "restart") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            Self.scheduleServerRestart(reason: "/admin/restart")
+            return try Self.jsonResponse(.ok, AdminRestartResponse(ok: true))
+        }
+
+        app.post("admin", "keepalive") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            let payload: AdminKeepAliveRequest
+            do {
+                payload = try req.content.decode(AdminKeepAliveRequest.self)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "Expected JSON field: on")
+                )
+            }
+            await MainActor.run {
+                KeepAliveService.shared.setEnabled(payload.on)
+            }
+            return try Self.jsonResponse(
+                .ok,
+                AdminApplyResponse(applied: ["keep_alive"], restarted: false)
+            )
+        }
+
+        app.get("admin", "log") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            let logs = await MainActor.run {
+                ServerTelemetry.shared.recentLogs(limit: 200)
+            }
+            return try Self.jsonResponse(.ok, AdminLogResponse(logs: logs))
         }
 
         // GET /
@@ -504,6 +633,7 @@ actor VaporServer {
                 <h2>Compute v2</h2>
                 <p><code>GET /health</code> returns live server health. <code>GET /stats</code>
                 adds the latest 20 request-log entries.</p>
+                <p>Remote control: <a href="/admin"><code>GET /admin</code></a>.</p>
                 <h3>OCR a PDF or rectify a photographed scan:</h3>
                 <pre><code>curl -H "Accept: application/json" \\
               -X POST 'http://&lt;YOUR IP&gt;:\(port)/upload?dpi=200&amp;max_pages=50&amp;rectify=1' \\
@@ -1444,6 +1574,169 @@ actor VaporServer {
     }
 
     // MARK: - Helpers
+
+    private static func requireAdminToken(request: Request) async throws {
+        let configuredToken = await MainActor.run {
+            Settings.shared.adminToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard configuredToken.isEmpty
+                || request.headers.first(name: "X-Admin-Token") == configuredToken else {
+            throw Abort(.unauthorized, reason: "Missing or invalid X-Admin-Token")
+        }
+    }
+
+    @MainActor
+    private static func adminSettingsSnapshot() -> AdminSettingsResponse {
+        let settings = Settings.shared
+        return AdminSettingsResponse(
+            recognition_level: settings.recognitionLevel,
+            language_correction: settings.languageCorrection,
+            automatically_detects_language: settings.automaticallyDetectsLanguage,
+            keep_alive: settings.keepAliveEnabled,
+            http_port: 8000,
+            admin_token_configured: !settings.adminToken
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+        )
+    }
+
+    @MainActor
+    private static func applyAdminSettings(_ patch: AdminSettingsPatch) throws -> AdminApplyResponse {
+        let settings = Settings.shared
+        var applied: [String] = []
+        var requiresRestart = false
+
+        if let value = patch.recognition_level {
+            let normalized: String
+            switch value.lowercased() {
+            case "accurate": normalized = "Accurate"
+            case "fast": normalized = "Fast"
+            default: throw AdminSettingsError.invalidRecognitionLevel
+            }
+            requiresRestart = requiresRestart || settings.recognitionLevel != normalized
+            settings.recognitionLevel = normalized
+            applied.append("recognition_level")
+        }
+        if let value = patch.language_correction {
+            requiresRestart = requiresRestart || settings.languageCorrection != value
+            settings.languageCorrection = value
+            applied.append("language_correction")
+        }
+        if let value = patch.automatically_detects_language {
+            requiresRestart = requiresRestart || settings.automaticallyDetectsLanguage != value
+            settings.automaticallyDetectsLanguage = value
+            applied.append("automatically_detects_language")
+        }
+        if let value = patch.keep_alive {
+            KeepAliveService.shared.setEnabled(value)
+            applied.append("keep_alive")
+        }
+        if let value = patch.http_port {
+            guard value == 8000 else { throw AdminSettingsError.pinnedPort }
+            settings.httpPort = 8000
+            applied.append("http_port")
+        }
+        if let value = patch.admin_token {
+            settings.adminToken = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            applied.append("admin_token")
+        }
+
+        guard !applied.isEmpty else { throw AdminSettingsError.emptyPatch }
+        return AdminApplyResponse(applied: applied, restarted: requiresRestart)
+    }
+
+    private static func scheduleServerRestart(reason: String) {
+        Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            NotificationCenter.default.post(
+                name: .vaporServerShouldRestart,
+                object: nil,
+                userInfo: ["reason": reason, "automatic": false]
+            )
+        }
+    }
+
+    private static func adminHTML(port: Int) -> String {
+        """
+        <!doctype html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>Compute Admin</title>
+          <style>
+            :root { color-scheme:dark; --bg:#071014; --panel:#0e1c21; --line:#244047; --ink:#e8f5f3; --muted:#88a5a2; --accent:#23d2bd; --warn:#ffb454; }
+            * { box-sizing:border-box; }
+            body { margin:0; background:radial-gradient(circle at top right,#12333a 0,transparent 42%),var(--bg); color:var(--ink); font:15px -apple-system,BlinkMacSystemFont,sans-serif; }
+            main { width:min(980px,calc(100% - 28px)); margin:28px auto 64px; }
+            h1 { margin:0; font:800 34px ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:-1px; }
+            .sub { color:var(--muted); margin:6px 0 22px; }
+            .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+            section { margin:14px 0; background:linear-gradient(145deg,#102329,#0a171b); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:0 18px 50px #0005; }
+            h2 { margin:0 0 14px; font-size:13px; text-transform:uppercase; letter-spacing:1.4px; color:var(--accent); }
+            label { display:grid; gap:6px; color:var(--muted); margin:10px 0; }
+            input,select,button { width:100%; border:1px solid var(--line); border-radius:9px; padding:10px 12px; color:var(--ink); background:#071216; font:inherit; }
+            input[type=checkbox] { width:auto; }
+            .check { display:flex; align-items:center; gap:9px; }
+            button { cursor:pointer; background:#133138; font-weight:700; }
+            button:hover { border-color:var(--accent); }
+            button.danger { margin-top:10px; color:#ffd8d3; background:#4b2020; }
+            .row { display:flex; gap:9px; margin-top:10px; }
+            .pill { display:inline-block; padding:5px 9px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font:12px ui-monospace,SFMono-Regular,Menlo,monospace; }
+            pre { min-height:230px; max-height:420px; overflow:auto; white-space:pre-wrap; color:#b9cfcc; font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; }
+            #message { min-height:20px; color:var(--warn); margin:12px 0; }
+          </style>
+        </head>
+        <body><main>
+          <h1>COMPUTE / ADMIN</h1>
+          <p class="sub">Live control for port \(port). Tokens stay only in this browser.</p>
+          <section>
+            <h2>Access</h2>
+            <label>Current X-Admin-Token <input id="token" type="password" autocomplete="off"></label>
+            <button id="remember">Remember current token locally</button>
+            <label>New token (blank clears protection) <input id="newToken" type="password" autocomplete="new-password"></label>
+            <button id="applyToken">Set / clear server token</button>
+            <div id="message"></div>
+          </section>
+          <div class="grid">
+            <section><h2>Health</h2><div id="health" class="pill">loading</div><pre id="healthData"></pre></section>
+            <section>
+              <h2>Settings</h2>
+              <label>Recognition level <select id="level"><option>Accurate</option><option>Fast</option></select></label>
+              <label class="check"><input id="correction" type="checkbox"> Language correction</label>
+              <label class="check"><input id="detect" type="checkbox"> Auto-detect language</label>
+              <label class="check"><input id="keepalive" type="checkbox"> Keep alive</label>
+              <div class="row"><button id="save">Apply settings</button><button id="toggleKeepalive">Toggle keep-alive</button></div>
+              <button id="restart" class="danger">Restart server</button>
+            </section>
+          </div>
+          <section><h2>Request Log · refresh 5s</h2><pre id="logs">loading</pre></section>
+        </main>
+        <script>
+          const $ = id => document.getElementById(id);
+          $('token').value = localStorage.getItem('computeAdminToken') || '';
+          const headers = () => { const h={'Content-Type':'application/json'}; if ($('token').value) h['X-Admin-Token']=$('token').value; return h; };
+          async function api(path, options={}) { const response=await fetch(path,{...options,headers:{...headers(),...(options.headers||{})}}); const data=await response.json(); if(!response.ok) throw new Error(data.reason||data.message||response.statusText); return data; }
+          function message(value) { $('message').textContent=value; }
+          async function refresh() {
+            try {
+              const [health,settings,log] = await Promise.all([api('/health'),api('/admin/settings'),api('/admin/log')]);
+              $('health').textContent=health.status.toUpperCase()+' · '+health.uptime_s+'s';
+              $('healthData').textContent=JSON.stringify(health,null,2);
+              $('level').value=settings.recognition_level; $('correction').checked=settings.language_correction; $('detect').checked=settings.automatically_detects_language; $('keepalive').checked=settings.keep_alive;
+              $('logs').textContent=log.logs.slice().reverse().map(x=>`${x.timestamp} ${x.method.padEnd(8)} ${String(x.status).padStart(3)} ${x.duration_ms.toFixed(1).padStart(8)}ms ${x.path}`).join('\\n');
+              message('');
+            } catch(error) { message(error.message); }
+          }
+          $('remember').onclick=()=>{ localStorage.setItem('computeAdminToken',$('token').value); message('Current token saved in localStorage.'); };
+          $('applyToken').onclick=async()=>{ try { const value=$('newToken').value; await api('/admin/settings',{method:'POST',body:JSON.stringify({admin_token:value})}); $('token').value=value; $('newToken').value=''; localStorage.setItem('computeAdminToken',value); message('Server token updated.'); } catch(error) { message(error.message); } };
+          $('save').onclick=async()=>{ try { await api('/admin/settings',{method:'POST',body:JSON.stringify({recognition_level:$('level').value,language_correction:$('correction').checked,automatically_detects_language:$('detect').checked,keep_alive:$('keepalive').checked})}); message('Settings applied. Restart may follow.'); } catch(error) { message(error.message); } };
+          $('toggleKeepalive').onclick=async()=>{ try { await api('/admin/keepalive',{method:'POST',body:JSON.stringify({on:!$('keepalive').checked})}); await refresh(); } catch(error) { message(error.message); } };
+          $('restart').onclick=async()=>{ try { await api('/admin/restart',{method:'POST',body:'{}'}); message('Restart requested.'); } catch(error) { message(error.message); } };
+          refresh(); setInterval(refresh,5000);
+        </script></body></html>
+        """
+    }
 
     private static func byteBufferToData(_ buffer: ByteBuffer) -> Data {
         var tmp = buffer

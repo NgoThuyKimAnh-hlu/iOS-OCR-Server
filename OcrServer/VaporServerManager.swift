@@ -33,9 +33,16 @@ final class VaporServerManager: ObservableObject {
         Settings.shared.httpPort = primaryPort
         NotificationCenter.default.publisher(for: .vaporServerShouldRestart)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] notification in
                 Task { @MainActor in
-                    self?.beginRestart(reason: "/server/crash")
+                    let reason = notification.userInfo?["reason"] as? String
+                    let automatic: Bool
+                    if let value = notification.userInfo?["automatic"] as? Bool {
+                        automatic = value
+                    } else {
+                        automatic = true
+                    }
+                    self?.beginRestart(reason: reason, countAsAutomatic: automatic)
                 }
             }
             .store(in: &cancellables)
@@ -70,7 +77,7 @@ final class VaporServerManager: ObservableObject {
     }
 
     func restartServer() {
-        beginRestart(reason: nil)
+        beginRestart(reason: nil, countAsAutomatic: false)
     }
 
     func setKeepAliveEnabled(_ enabled: Bool) {
@@ -126,10 +133,16 @@ final class VaporServerManager: ObservableObject {
         isRestarting = false
     }
 
-    private func beginRestart(reason: String?) {
+    private func beginRestart(reason: String?, countAsAutomatic: Bool) {
         guard lifecycleTask == nil else { return }
-        if let reason {
+        if countAsAutomatic, let reason {
             ServerTelemetry.shared.recordAutomaticRestart(reason: reason)
+        } else if let reason {
+            ServerTelemetry.shared.recordSystemEvent(
+                method: "RESTART",
+                path: reason,
+                status: 202
+            )
         }
 
         lifecycleTask = Task { [weak self] in
@@ -208,7 +221,10 @@ final class VaporServerManager: ObservableObject {
                         status: 503
                     )
                     if consecutiveFailures >= 2 {
-                        self.beginRestart(reason: "/health/unresponsive")
+                        self.beginRestart(
+                            reason: "/health/unresponsive",
+                            countAsAutomatic: true
+                        )
                         return
                     }
                 }

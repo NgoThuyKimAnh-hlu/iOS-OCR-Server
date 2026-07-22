@@ -65,4 +65,13 @@ class Settings {
             UserDefaults.standard.set(newValue, forKey: "keepAliveEnabled")
         }
     }
+
+    var adminToken: String {
+        get {
+            return UserDefaults.standard.string(forKey: "adminToken") ?? ""
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "adminToken")
+        }
+    }
 }

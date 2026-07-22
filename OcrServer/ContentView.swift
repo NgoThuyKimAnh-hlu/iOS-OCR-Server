@@ -154,6 +154,14 @@ struct ContentView: View {
                 }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(copiedAddress ? ConsolePalette.green : ConsolePalette.muted)
+
+                if let primaryIPAddress {
+                    Text("Admin: http://\(primaryIPAddress):\(serverManager.port)/admin")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(ConsolePalette.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                }
             }
             .padding(18)
             .background(

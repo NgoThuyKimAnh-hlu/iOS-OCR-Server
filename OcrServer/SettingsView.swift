@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State var languageCorrection = Settings.shared.languageCorrection
     @State var autoDetectLanguage = Settings.shared.automaticallyDetectsLanguage
     @State var keepAliveEnabled = Settings.shared.keepAliveEnabled
+    @State var adminToken = Settings.shared.adminToken
     
     var body: some View {
         NavigationView {
@@ -56,6 +57,16 @@ struct SettingsView: View {
                             title: "Keep alive khi khóa máy",
                             isOn: $keepAliveEnabled
                         )
+                        HStack(spacing: 12) {
+                            Image(systemName: "key.horizontal")
+                                .font(.title2)
+                                .foregroundColor(.accentColor)
+                                .frame(width: 28, height: 28)
+                            SecureField("Admin token (optional)", text: $adminToken)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                        }
+                        .padding(.vertical, 4)
                     }
                     
                     Button(action: apply) {
@@ -99,6 +110,11 @@ struct SettingsView: View {
             }
             .onChange(of: keepAliveEnabled) { oldValue, newValue in
                 serverManager.setKeepAliveEnabled(newValue)
+            }
+            .onChange(of: adminToken) { oldValue, newValue in
+                Settings.shared.adminToken = newValue.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
             }
         }
     }
