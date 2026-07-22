@@ -2517,7 +2517,7 @@ actor VaporServer {
         }
         let groups = CorrectorGroup.allCases.map(\.rawValue).sorted()
         return [
-            item("recognition_level", "enum", options: ["accurate", "fast"]),
+            item("recognition_level", "enum", nil, nil, ["accurate", "fast"]),
             item("recognition_languages", "string_array", 1, 8),
             item("uses_language_correction", "bool"),
             item("automatically_detects_language", "bool"),
