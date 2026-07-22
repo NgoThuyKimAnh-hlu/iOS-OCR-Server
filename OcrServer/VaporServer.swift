@@ -39,6 +39,14 @@ struct DocOCRResult: Content {
     let success: Bool
     let message: String
     let ocr_text: String
+    let rectified: Bool?
+
+    init(success: Bool, message: String, ocr_text: String, rectified: Bool? = nil) {
+        self.success = success
+        self.message = message
+        self.ocr_text = ocr_text
+        self.rectified = rectified
+    }
 }
 
 struct UploadResponse: Content {
@@ -48,6 +56,78 @@ struct UploadResponse: Content {
     let image_width: Int
     let image_height: Int
     let ocr_boxes: [OCRBoxItem]
+    let rectified: Bool?
+
+    init(
+        success: Bool,
+        message: String,
+        ocr_result: String,
+        image_width: Int,
+        image_height: Int,
+        ocr_boxes: [OCRBoxItem],
+        rectified: Bool? = nil
+    ) {
+        self.success = success
+        self.message = message
+        self.ocr_result = ocr_result
+        self.image_width = image_width
+        self.image_height = image_height
+        self.ocr_boxes = ocr_boxes
+        self.rectified = rectified
+    }
+}
+
+struct PDFUploadPageResponse: Content {
+    let page: Int
+    let success: Bool
+    let message: String
+    let ocr_result: String
+    let image_width: Int
+    let image_height: Int
+    let ocr_boxes: [OCRBoxItem]
+    let rectified: Bool?
+}
+
+struct PDFUploadResponse: Content {
+    let success: Bool
+    let message: String
+    let pages: [PDFUploadPageResponse]
+    let page_count: Int
+}
+
+struct PDFDocOCRPageResponse: Content {
+    let page: Int
+    let success: Bool
+    let message: String
+    let ocr_text: String
+    let rectified: Bool?
+}
+
+struct PDFDocOCRResponse: Content {
+    let success: Bool
+    let message: String
+    let pages: [PDFDocOCRPageResponse]
+    let page_count: Int
+}
+
+struct BatchUploadResponse: Content {
+    let filename: String
+    let success: Bool
+    let message: String
+    let ocr_result: String
+    let image_width: Int
+    let image_height: Int
+    let ocr_boxes: [OCRBoxItem]
+}
+
+struct BarcodeItemResponse: Content {
+    let payload: String
+    let symbology: String
+    let confidence: Double
+}
+
+struct BarcodeResponse: Content {
+    let codes: [BarcodeItemResponse]
 }
 
 struct TranslateRequestBody: Content {
@@ -139,6 +219,12 @@ struct CoreMLDeleteResponse: Content {
 struct ComputeErrorResponse: Content {
     let success: Bool
     let message: String
+}
+
+private struct OCRRequestOptions: Decodable {
+    let dpi: Int?
+    let max_pages: Int?
+    let rectify: Int?
 }
 
 actor VaporServer {
@@ -274,6 +360,18 @@ actor VaporServer {
             return try Self.jsonResponse(.ok, health)
         }
 
+        app.get("stats") { [weak self] req async throws -> Response in
+            guard let self else { throw Abort(.internalServerError) }
+            let port = await self.port
+            let stats = await MainActor.run {
+                ServerTelemetry.shared.statsResponse(
+                    port: port,
+                    keepAlive: KeepAliveService.shared.isActive
+                )
+            }
+            return try Self.jsonResponse(.ok, stats)
+        }
+
         // GET /
         app.get { [weak self] req async throws -> Response in
             guard let self else { throw Abort(.internalServerError) }
@@ -309,10 +407,20 @@ actor VaporServer {
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Apple Compute Server</title>
+                <title>Compute Server</title>
                 <style>
+                    body {
+                        max-width: 920px;
+                        margin: 0 auto;
+                        padding: 24px;
+                        color: #e9f2f1;
+                        background: #091014;
+                        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                    }
+                    a { color: #2bd4c2; }
                     code {
-                        background: #dadada;
+                        color: #c7fff7;
+                        background: #162429;
                         padding: 2px 6px;
                         font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
                         font-size: 0.85em;
@@ -320,7 +428,8 @@ actor VaporServer {
                         border-radius: 5px;
                     }
                     pre {
-                        background: #dadada;
+                        color: #d9e5e3;
+                        background: #101b1f;
                         padding: 16px;
                         overflow: auto;
                         font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -338,7 +447,7 @@ actor VaporServer {
                 </style>
             </head>
             <body>
-                <h1>Apple Compute Server</h1>
+                <h1>Compute Server</h1>
                 <h3>Upload an image via <code>upload</code> API:</h3>
                 <pre><code>curl -H "Accept: application/json" \\
               -X POST http://&lt;YOUR IP&gt;:\(port)/upload \\
@@ -392,12 +501,31 @@ actor VaporServer {
               -X POST http://&lt;YOUR IP&gt;:\(port)/coreml/predict \\
               -d '{"model_id":"vietnameselegal-HASH","inputs":{"input_ids":[[1,2,3,4]]}}'</code></pre>
                 <hr>
+                <h2>Compute v2</h2>
+                <p><code>GET /health</code> returns live server health. <code>GET /stats</code>
+                adds the latest 20 request-log entries.</p>
+                <h3>OCR a PDF or rectify a photographed scan:</h3>
+                <pre><code>curl -H "Accept: application/json" \\
+              -X POST 'http://&lt;YOUR IP&gt;:\(port)/upload?dpi=200&amp;max_pages=50&amp;rectify=1' \\
+              -F "file=@document.pdf"</code></pre>
+                <p><code>/docOCR</code> accepts the same PDF and rectify query parameters on iOS 26.</p>
+                <h3>Sequential image batch:</h3>
+                <pre><code>curl -H "Accept: application/json" \\
+              -X POST http://&lt;YOUR IP&gt;:\(port)/batch \\
+              -F "file=@page-1.png" \\
+              -F "file=@page-2.jpg"</code></pre>
+                <h3>Detect barcodes:</h3>
+                <pre><code>curl -H "Accept: application/json" \\
+              -X POST http://&lt;YOUR IP&gt;:\(port)/barcode \\
+              -F "file=@barcode.png"</code></pre>
+                <p>PDF safety limits: <code>dpi=72...300</code>, <code>max_pages=1...200</code>.</p>
+                <hr>
                 <h3>OCR Test:</h3>
                 <form id="ocrForm" action="/upload" method="post" enctype="multipart/form-data">
                     \(docOcrCheckBox)
                     <label>
                         Choose file:
-                        <input type="file" name="file" required>
+                        <input type="file" name="file" accept="image/*,application/pdf" required>
                     </label>
                     <br><br>
                     <input type="submit" value="Upload file">
@@ -420,7 +548,7 @@ actor VaporServer {
             return Self.htmlResponse(html)
         }
 
-        // POST /upload（限制收集本文大小，可自行調整）
+        // POST /upload
         app.on(.POST, "upload", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
             guard let self else { throw Abort(.internalServerError) }
 
@@ -457,32 +585,98 @@ actor VaporServer {
                 )
             }
 
-            // 取得 actor 內的參數（需 await）
+            let options: OCRRequestOptions
+            do {
+                options = try Self.requestOptions(from: req)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+
             let recognitionLevel = await self.recognitionLevel
             let usesLanguageCorrection = await self.usesLanguageCorrection
             let automaticallyDetectsLanguage = await self.automaticallyDetectsLanguage
-
-            // ByteBuffer -> Data
             let data = Self.byteBufferToData(upload.file.data)
-
-            // OCR
             let textRecognizer = TextRecognizer(
                 recognitionLevel: recognitionLevel,
                 usesLanguageCorrection: usesLanguageCorrection,
                 automaticallyDetectsLanguage: automaticallyDetectsLanguage
             )
 
+            if Self.isPDF(data) {
+                do {
+                    let rendered = try await ImageProcessingService.shared.renderPDF(
+                        data: data,
+                        dpi: options.dpi ?? 200,
+                        maximumPages: options.max_pages ?? 50
+                    )
+                    var pages: [PDFUploadPageResponse] = []
+                    pages.reserveCapacity(rendered.pages.count)
+
+                    for page in rendered.pages {
+                        let processed: RectifiedImage
+                        if options.rectify == 1 {
+                            processed = await ImageProcessingService.shared.rectify(data: page.imageData)
+                        } else {
+                            processed = RectifiedImage(data: page.imageData, rectified: false)
+                        }
+                        let result = await textRecognizer.getOcrResult(data: processed.data)
+                        pages.append(
+                            PDFUploadPageResponse(
+                                page: page.pageNumber,
+                                success: result != nil,
+                                message: result == nil ? "OCR failed" : "OCR completed successfully",
+                                ocr_result: result?.text ?? "",
+                                image_width: result?.image_width ?? 0,
+                                image_height: result?.image_height ?? 0,
+                                ocr_boxes: result?.boxes ?? [],
+                                rectified: options.rectify == 1 ? processed.rectified : nil
+                            )
+                        )
+                    }
+
+                    let succeeded = pages.allSatisfy(\.success)
+                    return try Self.jsonResponse(
+                        .ok,
+                        PDFUploadResponse(
+                            success: succeeded,
+                            message: "Processed \(pages.count) of \(rendered.totalPageCount) PDF pages",
+                            pages: pages,
+                            page_count: pages.count
+                        )
+                    )
+                } catch {
+                    return try Self.jsonResponse(
+                        .badRequest,
+                        ComputeErrorResponse(success: false, message: error.localizedDescription)
+                    )
+                }
+            }
+
+            let processed: RectifiedImage
+            if options.rectify == 1 {
+                processed = await ImageProcessingService.shared.rectify(data: data)
+            } else {
+                processed = RectifiedImage(data: data, rectified: false)
+            }
             let accept = (req.headers.first(name: .accept) ?? "").lowercased()
-            
-            let result = await textRecognizer.getOcrResult(data: data)
+            let result = await textRecognizer.getOcrResult(data: processed.data)
             
             if result == nil && accept.contains("application/json") {
-                return try Self.jsonResponse(.internalServerError, UploadResponse(success: false,
-                                                                                  message: "OCR failed",
-                                                                                  ocr_result: "",
-                                                                                  image_width: 0,
-                                                                                  image_height: 0,
-                                                                                  ocr_boxes: []))
+                return try Self.jsonResponse(
+                    .internalServerError,
+                    UploadResponse(
+                        success: false,
+                        message: "OCR failed",
+                        ocr_result: "",
+                        image_width: 0,
+                        image_height: 0,
+                        ocr_boxes: [],
+                        rectified: options.rectify == 1 ? processed.rectified : nil
+                    )
+                )
             }
             
             if accept.contains("application/json") {
@@ -494,7 +688,8 @@ actor VaporServer {
                         ocr_result: result?.text ?? "",
                         image_width: result?.image_width ?? 0,
                         image_height: result?.image_height ?? 0,
-                        ocr_boxes: result?.boxes ?? []
+                        ocr_boxes: result?.boxes ?? [],
+                        rectified: options.rectify == 1 ? processed.rectified : nil
                     )
                 )
             } else {
@@ -505,7 +700,7 @@ actor VaporServer {
                 <head>
                     <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>OCR Server</title>
+                    <title>Compute Server</title>
                 </head>
                 <body>
                     <h2>OCR Result:</h2>
@@ -514,6 +709,108 @@ actor VaporServer {
                 </html>
                 """
                 return Self.htmlResponse(html)
+            }
+        }
+
+        // POST /batch
+        app.on(.POST, "batch", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
+            guard let self else { throw Abort(.internalServerError) }
+
+            let files: [ParsedMultipartFile]
+            do {
+                files = try MultipartUploadParser.files(from: req, fieldName: "file")
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+
+            let recognitionLevel = await self.recognitionLevel
+            let usesLanguageCorrection = await self.usesLanguageCorrection
+            let automaticallyDetectsLanguage = await self.automaticallyDetectsLanguage
+            let textRecognizer = TextRecognizer(
+                recognitionLevel: recognitionLevel,
+                usesLanguageCorrection: usesLanguageCorrection,
+                automaticallyDetectsLanguage: automaticallyDetectsLanguage
+            )
+
+            var responses: [BatchUploadResponse] = []
+            responses.reserveCapacity(files.count)
+            for file in files {
+                guard !Self.isPDF(file.data) else {
+                    responses.append(
+                        BatchUploadResponse(
+                            filename: file.filename,
+                            success: false,
+                            message: "PDF is not supported by /batch; use /upload",
+                            ocr_result: "",
+                            image_width: 0,
+                            image_height: 0,
+                            ocr_boxes: []
+                        )
+                    )
+                    continue
+                }
+
+                let result = await textRecognizer.getOcrResult(data: file.data)
+                responses.append(
+                    BatchUploadResponse(
+                        filename: file.filename,
+                        success: result != nil,
+                        message: result == nil ? "OCR failed" : "OCR completed successfully",
+                        ocr_result: result?.text ?? "",
+                        image_width: result?.image_width ?? 0,
+                        image_height: result?.image_height ?? 0,
+                        ocr_boxes: result?.boxes ?? []
+                    )
+                )
+            }
+
+            return try Self.jsonResponse(.ok, responses)
+        }
+
+        // POST /barcode
+        app.on(.POST, "barcode", body: .collect(maxSize: "100mb")) { req async throws -> Response in
+            struct BarcodeUpload: Content { var file: File }
+
+            let upload: BarcodeUpload
+            do {
+                upload = try req.content.decode(BarcodeUpload.self)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "Missing or empty 'file' part")
+                )
+            }
+            guard upload.file.data.readableBytes > 0 else {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: "Missing or empty 'file' part")
+                )
+            }
+
+            do {
+                let codes = try await ImageProcessingService.shared.detectBarcodes(
+                    data: Self.byteBufferToData(upload.file.data)
+                )
+                return try Self.jsonResponse(
+                    .ok,
+                    BarcodeResponse(
+                        codes: codes.map {
+                            BarcodeItemResponse(
+                                payload: $0.payload,
+                                symbology: $0.symbology,
+                                confidence: $0.confidence
+                            )
+                        }
+                    )
+                )
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
             }
         }
         
@@ -967,10 +1264,9 @@ actor VaporServer {
             }
         }
 
-        // POST /docOCR（限制收集本文大小，可自行調整）
+        // POST /docOCR
         app.on(.POST, "docOCR", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
             if #unavailable(iOS 26) {
-                // iOS 26 以下
                 return try Self.jsonResponse(
                     .ok,
                     DocOCRResult(
@@ -1010,49 +1306,111 @@ actor VaporServer {
                 )
             }
 
-            // 取得 actor 內的參數（需 await）
+            let options: OCRRequestOptions
+            do {
+                options = try Self.requestOptions(from: req)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                )
+            }
+
             let usesLanguageCorrection = await self.usesLanguageCorrection
             let automaticallyDetectsLanguage = await self.automaticallyDetectsLanguage
-
-            // ByteBuffer -> Data
             let data = Self.byteBufferToData(upload.file.data)
 
-            let accept = (req.headers.first(name: .accept) ?? "").lowercased()
-            
-            // OCR
-            var resultText : String? = nil
             if #available(iOS 26, *) {
                 let docRecognizer = DocRecognizer(
                     usesLanguageCorrection: usesLanguageCorrection,
                     automaticallyDetectsLanguage: automaticallyDetectsLanguage
                 )
-                resultText = await docRecognizer.recognizeParagraphText(from: data)
-            }
-            
-            if resultText == nil && accept.contains("application/json") {
-                return try Self.jsonResponse(.internalServerError, DocOCRResult(success: false,
-                                                                                message: "OCR failed",
-                                                                                ocr_text: ""))
-            }
-            
-            if accept.contains("application/json") {
-                return try Self.jsonResponse(
-                    .ok,
-                    DocOCRResult(
-                        success: true,
-                        message: "OCR completed successfully",
-                        ocr_text: resultText ?? ""
+
+                if Self.isPDF(data) {
+                    do {
+                        let rendered = try await ImageProcessingService.shared.renderPDF(
+                            data: data,
+                            dpi: options.dpi ?? 200,
+                            maximumPages: options.max_pages ?? 50
+                        )
+                        var pages: [PDFDocOCRPageResponse] = []
+                        pages.reserveCapacity(rendered.pages.count)
+
+                        for page in rendered.pages {
+                            let processed: RectifiedImage
+                            if options.rectify == 1 {
+                                processed = await ImageProcessingService.shared.rectify(
+                                    data: page.imageData
+                                )
+                            } else {
+                                processed = RectifiedImage(
+                                    data: page.imageData,
+                                    rectified: false
+                                )
+                            }
+                            let text = await docRecognizer.recognizeParagraphText(
+                                from: processed.data
+                            )
+                            pages.append(
+                                PDFDocOCRPageResponse(
+                                    page: page.pageNumber,
+                                    success: true,
+                                    message: "OCR completed successfully",
+                                    ocr_text: text,
+                                    rectified: options.rectify == 1 ? processed.rectified : nil
+                                )
+                            )
+                        }
+
+                        return try Self.jsonResponse(
+                            .ok,
+                            PDFDocOCRResponse(
+                                success: true,
+                                message: "Processed \(pages.count) of \(rendered.totalPageCount) PDF pages",
+                                pages: pages,
+                                page_count: pages.count
+                            )
+                        )
+                    } catch {
+                        return try Self.jsonResponse(
+                            .badRequest,
+                            ComputeErrorResponse(
+                                success: false,
+                                message: error.localizedDescription
+                            )
+                        )
+                    }
+                }
+
+                let processed: RectifiedImage
+                if options.rectify == 1 {
+                    processed = await ImageProcessingService.shared.rectify(data: data)
+                } else {
+                    processed = RectifiedImage(data: data, rectified: false)
+                }
+                let resultText = await docRecognizer.recognizeParagraphText(from: processed.data)
+                let accept = (req.headers.first(name: .accept) ?? "").lowercased()
+
+                if accept.contains("application/json") {
+                    return try Self.jsonResponse(
+                        .ok,
+                        DocOCRResult(
+                            success: true,
+                            message: "OCR completed successfully",
+                            ocr_text: resultText,
+                            rectified: options.rectify == 1 ? processed.rectified : nil
+                        )
                     )
-                )
-            } else {
-                let escaped = Self.htmlEscape(resultText ?? "")
+                }
+
+                let escaped = Self.htmlEscape(resultText)
                 let html = """
                 <!doctype html>
                 <html>
                 <head>
                     <meta charset="utf-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>OCR Server</title>
+                    <title>Compute Server</title>
                     <style>
                         pre {
                             width: 100%;
@@ -1073,6 +1431,15 @@ actor VaporServer {
                 """
                 return Self.htmlResponse(html)
             }
+
+            return try Self.jsonResponse(
+                .serviceUnavailable,
+                DocOCRResult(
+                    success: false,
+                    message: "This API is only supported on iOS 26 and later",
+                    ocr_text: ""
+                )
+            )
         }
     }
 
@@ -1084,6 +1451,26 @@ actor VaporServer {
             return Data(bytes)
         }
         return Data()
+    }
+
+    private static func requestOptions(from request: Request) throws -> OCRRequestOptions {
+        let options = try request.query.decode(OCRRequestOptions.self)
+        if let dpi = options.dpi, !(72...300).contains(dpi) {
+            throw ImageProcessingError.invalidPDFOptions("'dpi' must be between 72 and 300")
+        }
+        if let maximumPages = options.max_pages, !(1...200).contains(maximumPages) {
+            throw ImageProcessingError.invalidPDFOptions(
+                "'max_pages' must be between 1 and 200"
+            )
+        }
+        if let rectify = options.rectify, rectify != 0, rectify != 1 {
+            throw ImageProcessingError.invalidPDFOptions("'rectify' must be 0 or 1")
+        }
+        return options
+    }
+
+    private static func isPDF(_ data: Data) -> Bool {
+        data.starts(with: Data("%PDF".utf8))
     }
 
     private static func htmlEscape(_ s: String) -> String {

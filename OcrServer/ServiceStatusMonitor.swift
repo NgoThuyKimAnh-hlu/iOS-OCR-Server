@@ -6,7 +6,7 @@
 import Combine
 import Foundation
 
-enum ComputeServiceState: Sendable {
+enum ComputeServiceState: Equatable, Sendable {
     case ready
     case degraded
     case disabled

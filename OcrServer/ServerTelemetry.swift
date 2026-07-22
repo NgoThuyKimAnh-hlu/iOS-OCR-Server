@@ -38,6 +38,22 @@ struct ServerHealthResponse: Content, Sendable {
     let mem_free_mb: Int
 }
 
+struct ServerStatsResponse: Content, Sendable {
+    let status: String
+    let uptime_s: Int
+    let port: Int
+    let version: String
+    let requests_total: Int
+    let requests_ok: Int
+    let requests_fail: Int
+    let auto_restarts: Int
+    let keep_alive: Bool
+    let battery: ServerBatteryStatus
+    let thermal: String
+    let mem_free_mb: Int
+    let logs: [RequestLogEntry]
+}
+
 @MainActor
 final class ServerTelemetry: ObservableObject {
     static let shared = ServerTelemetry()
@@ -118,9 +134,10 @@ final class ServerTelemetry: ObservableObject {
         let level = device.batteryLevel >= 0
             ? Int((device.batteryLevel * 100).rounded())
             : nil
-        let shortVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-            ?? "Unknown"
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
+        let shortVersion = (
+            Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        ) ?? "Unknown"
+        let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "Unknown"
 
         return ServerHealthResponse(
             status: "ok",
@@ -140,6 +157,25 @@ final class ServerTelemetry: ObservableObject {
             ),
             thermal: Self.thermalStateName(ProcessInfo.processInfo.thermalState),
             mem_free_mb: Self.freeMemoryMegabytes()
+        )
+    }
+
+    func statsResponse(port: Int, keepAlive: Bool) -> ServerStatsResponse {
+        let health = healthResponse(port: port, keepAlive: keepAlive)
+        return ServerStatsResponse(
+            status: health.status,
+            uptime_s: health.uptime_s,
+            port: health.port,
+            version: health.version,
+            requests_total: health.requests_total,
+            requests_ok: health.requests_ok,
+            requests_fail: health.requests_fail,
+            auto_restarts: health.auto_restarts,
+            keep_alive: health.keep_alive,
+            battery: health.battery,
+            thermal: health.thermal,
+            mem_free_mb: health.mem_free_mb,
+            logs: recentLogs(limit: 20)
         )
     }
 

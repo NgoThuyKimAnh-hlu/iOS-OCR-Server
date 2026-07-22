@@ -17,7 +17,7 @@ class Settings {
     
     var httpPort: Int {
         get {
-            return UserDefaults.standard.object(forKey: "httpPort") as? Int ?? 8000
+            return (UserDefaults.standard.object(forKey: "httpPort") as? Int) ?? 8000
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "httpPort")
@@ -35,7 +35,9 @@ class Settings {
     
     var languageCorrection: Bool {
         get {
-            return UserDefaults.standard.object(forKey: "languageCorrection") as? Bool ?? true
+            return (
+                UserDefaults.standard.object(forKey: "languageCorrection") as? Bool
+            ) ?? true
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "languageCorrection")
@@ -44,7 +46,9 @@ class Settings {
     
     var automaticallyDetectsLanguage: Bool {
         get {
-            return UserDefaults.standard.object(forKey: "automaticallyDetectsLanguage") as? Bool ?? true
+            return (
+                UserDefaults.standard.object(forKey: "automaticallyDetectsLanguage") as? Bool
+            ) ?? true
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "automaticallyDetectsLanguage")
@@ -53,7 +57,9 @@ class Settings {
 
     var keepAliveEnabled: Bool {
         get {
-            return UserDefaults.standard.object(forKey: "keepAliveEnabled") as? Bool ?? true
+            return (
+                UserDefaults.standard.object(forKey: "keepAliveEnabled") as? Bool
+            ) ?? true
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "keepAliveEnabled")
