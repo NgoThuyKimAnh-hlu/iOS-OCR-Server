@@ -34,6 +34,15 @@ enum SpeechServiceError: LocalizedError {
 actor SpeechService {
     static let shared = SpeechService()
 
+    func isAvailable(locale: String) -> Bool {
+        let authorization = SFSpeechRecognizer.authorizationStatus()
+        guard authorization != .denied, authorization != .restricted,
+              let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)) else {
+            return false
+        }
+        return recognizer.isAvailable && recognizer.supportsOnDeviceRecognition
+    }
+
     func transcribe(data: Data, fileExtension: String, locale: String) async throws -> SpeechOutput {
         let authorization = await requestAuthorization()
         guard authorization == .authorized else {

@@ -47,6 +47,8 @@ final class TranslationService: ObservableObject {
 
     private init() {}
 
+    var isReady: Bool { true }
+
     func translate(text: String, source: String?, target: String) async throws -> TranslationOutput {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let target = target.trimmingCharacters(in: .whitespacesAndNewlines)

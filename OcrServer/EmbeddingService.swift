@@ -30,6 +30,11 @@ actor EmbeddingService {
 
     private init() {}
 
+    func isVietnameseAvailable() -> Bool {
+        NLEmbedding.sentenceEmbedding(for: .vietnamese) != nil
+            || NLEmbedding.wordEmbedding(for: .vietnamese) != nil
+    }
+
     func embed(_ input: String) throws -> EmbeddingOutput {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw EmbeddingServiceError.emptyText }

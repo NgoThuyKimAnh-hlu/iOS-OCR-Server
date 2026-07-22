@@ -29,6 +29,13 @@ actor LLMService {
 
     private init() {}
 
+    func isAvailable() -> Bool {
+        if case .available = SystemLanguageModel.default.availability {
+            return true
+        }
+        return false
+    }
+
     func respond(prompt: String, system: String?, maximumTokens: Int?) async throws -> String {
         let prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let system = system?.trimmingCharacters(in: .whitespacesAndNewlines)

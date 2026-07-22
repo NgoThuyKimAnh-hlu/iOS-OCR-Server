@@ -10,6 +10,7 @@ import SwiftUI
 /// Lightweight line chart for 0..1 values
 struct LineChart: View {
     let values: [Double]
+    var color: Color = .primary
 
     var body: some View {
         GeometryReader { geo in
@@ -24,7 +25,7 @@ struct LineChart: View {
                 path.move(to: first)
                 for p in points.dropFirst() { path.addLine(to: p) }
             }
-            .stroke(.primary.opacity(0.7), lineWidth: 1.5)
+            .stroke(color.opacity(0.8), lineWidth: 1.5)
         }
     }
 }

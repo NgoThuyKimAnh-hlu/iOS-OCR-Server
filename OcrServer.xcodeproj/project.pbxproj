@@ -291,7 +291,7 @@
 				CURRENT_PROJECT_VERSION = 30;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "OCR Server";
+				INFOPLIST_KEY_CFBundleDisplayName = Compute;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to capture images for OCR.";
 				INFOPLIST_KEY_NSBonjourServices = "_http._tcp";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Compute advertises its local HTTP server to devices on your network.";
@@ -329,7 +329,7 @@
 				CURRENT_PROJECT_VERSION = 30;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "OCR Server";
+				INFOPLIST_KEY_CFBundleDisplayName = Compute;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to capture images for OCR.";
 				INFOPLIST_KEY_NSBonjourServices = "_http._tcp";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Compute advertises its local HTTP server to devices on your network.";

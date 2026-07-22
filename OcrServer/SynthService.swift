@@ -34,6 +34,10 @@ final class SynthService {
 
     private init() {}
 
+    func isVoiceAvailable(language: String) -> Bool {
+        AVSpeechSynthesisVoice(language: language) != nil
+    }
+
     func synthesize(text: String, language: String, rate: Float) async throws -> Data {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw SynthServiceError.emptyText }

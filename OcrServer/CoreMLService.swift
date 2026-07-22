@@ -131,6 +131,10 @@ actor CoreMLService {
 
     private init() {}
 
+    func isAvailable() -> Bool {
+        (try? modelsDirectory()) != nil
+    }
+
     func upload(data: Data, filename: String) async throws -> CoreMLModelInfo {
         guard !data.isEmpty else {
             throw CoreMLServiceError.invalidUpload("Missing or empty 'file' part")
