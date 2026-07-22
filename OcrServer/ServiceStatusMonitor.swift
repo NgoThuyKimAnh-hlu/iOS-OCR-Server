@@ -25,14 +25,33 @@ final class ServiceStatusMonitor: ObservableObject {
     @Published private(set) var services: [ComputeServiceStatus] = []
 
     func refresh() async {
-        let speechReady = await SpeechService.shared.isAvailable(locale: "vi-VN")
-        let embeddingReady = await EmbeddingService.shared.isVietnameseAvailable()
-        let coreMLReady = await CoreMLService.shared.isAvailable()
-        let translationReady = TranslationService.shared.isReady
-        let synthReady = SynthService.shared.isVoiceAvailable(language: "vi-VN")
+        let configured = Settings.shared.serviceStates()
+        let speechReady: Bool
+        if configured[ComputeServiceName.transcribe.rawValue] != false {
+            speechReady = await SpeechService.shared.isAvailable(locale: "vi-VN")
+        } else {
+            speechReady = false
+        }
+        let embeddingReady: Bool
+        if configured[ComputeServiceName.embed.rawValue] != false {
+            embeddingReady = await EmbeddingService.shared.isVietnameseAvailable()
+        } else {
+            embeddingReady = false
+        }
+        let coreMLReady: Bool
+        if configured[ComputeServiceName.coreml.rawValue] != false {
+            coreMLReady = await CoreMLService.shared.isAvailable()
+        } else {
+            coreMLReady = false
+        }
+        let translationReady = configured[ComputeServiceName.translate.rawValue] != false
+            && TranslationService.shared.isReady
+        let synthReady = configured[ComputeServiceName.synthesize.rawValue] != false
+            && SynthService.shared.isVoiceAvailable(language: "vi-VN")
 
         let llmReady: Bool
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *),
+           configured[ComputeServiceName.llm.rawValue] != false {
             llmReady = await LLMService.shared.isAvailable()
         } else {
             llmReady = false
@@ -68,14 +87,14 @@ final class ServiceStatusMonitor: ObservableObject {
                 detail: translationReady ? "Translation host ready" : "Host unavailable"
             ),
             ComputeServiceStatus(
-                id: "stt",
+                id: "transcribe",
                 name: "STT",
                 icon: "waveform.badge.mic",
                 state: speechReady ? .ready : .degraded,
                 detail: speechReady ? "vi-VN on-device" : "Recognizer or permission unavailable"
             ),
             ComputeServiceStatus(
-                id: "tts",
+                id: "synthesize",
                 name: "TTS",
                 icon: "speaker.wave.2",
                 state: synthReady ? .ready : .degraded,
@@ -108,7 +127,25 @@ final class ServiceStatusMonitor: ObservableObject {
                 icon: "cpu",
                 state: coreMLReady ? .ready : .degraded,
                 detail: coreMLReady ? "Model storage ready" : "Model storage unavailable"
+            ),
+            ComputeServiceStatus(
+                id: "barcode",
+                name: "Barcode",
+                icon: "barcode.viewfinder",
+                state: .ready,
+                detail: "Vision barcode detection"
             )
-        ]
+        ].map { service in
+            guard configured[service.id] != false else {
+                return ComputeServiceStatus(
+                    id: service.id,
+                    name: service.name,
+                    icon: service.icon,
+                    state: .disabled,
+                    detail: "Disabled remotely"
+                )
+            }
+            return service
+        }
     }
 }

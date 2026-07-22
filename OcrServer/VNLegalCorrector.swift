@@ -93,6 +93,7 @@ actor VNLegalCorrector {
     func correct(
         _ text: String,
         groups: Set<CorrectorGroup> = Set(CorrectorGroup.allCases),
+        overrides: [String: String] = [:],
         collectTrace: Bool = false
     ) throws -> OCRCorrectionResult {
         guard !text.isEmpty else {
@@ -141,6 +142,18 @@ actor VNLegalCorrector {
 
         if groups.contains(.legalIDNormalize) {
             let result = normalizeLegalIDs(in: output, collectTrace: collectTrace)
+            output = result.text
+            applied += result.correctionsApplied
+            trace.append(contentsOf: result.trace)
+        }
+
+        if !overrides.isEmpty {
+            let result = try applyOverrides(
+                to: output,
+                overrides: overrides,
+                respectValid: respectValid,
+                collectTrace: collectTrace
+            )
             output = result.text
             applied += result.correctionsApplied
             trace.append(contentsOf: result.trace)
@@ -441,6 +454,75 @@ actor VNLegalCorrector {
                         action: "normalized"
                     )
                 )
+            }
+        }
+
+        return OCRCorrectionResult(text: output, correctionsApplied: applied, trace: trace)
+    }
+
+    private func applyOverrides(
+        to text: String,
+        overrides: [String: String],
+        respectValid: Bool,
+        collectTrace: Bool
+    ) throws -> OCRCorrectionResult {
+        let vocabulary = respectValid ? try loadUnigrams() : [:]
+        var output = text
+        var applied = 0
+        var trace: [OCRCorrectionTraceItem] = []
+
+        for source in overrides.keys.sorted(by: { $0.count > $1.count }) {
+            guard let target = overrides[source], source != target else { continue }
+            let body = source
+                .split(whereSeparator: \.isWhitespace)
+                .map { NSRegularExpression.escapedPattern(for: String($0)) }
+                .joined(separator: "[ \\t]+")
+            guard let regex = try? NSRegularExpression(
+                pattern: "(?<![A-Za-zÀ-ỹĐđ])\(body)(?![A-Za-zÀ-ỹĐđ])",
+                options: [.caseInsensitive]
+            ) else {
+                continue
+            }
+            let matches = regex.matches(
+                in: output,
+                range: NSRange(output.startIndex..., in: output)
+            )
+            for match in matches.reversed() {
+                guard let range = Range(match.range, in: output) else { continue }
+                let original = String(output[range])
+                let proposed = Self.casePhrase(source: original, replacement: target)
+                let replacement = respectValid
+                    ? Self.guardedPhrase(
+                        source: original,
+                        replacement: proposed,
+                        vocabulary: vocabulary
+                    )
+                    : proposed
+                guard replacement != original else {
+                    if collectTrace, proposed != original {
+                        trace.append(
+                            OCRCorrectionTraceItem(
+                                token_raw: original,
+                                token_out: original,
+                                rule_id: "respect_valid:custom:\(source)",
+                                action: "skipped_valid"
+                            )
+                        )
+                    }
+                    continue
+                }
+                output.replaceSubrange(range, with: replacement)
+                applied += 1
+                if collectTrace {
+                    trace.append(
+                        OCRCorrectionTraceItem(
+                            token_raw: original,
+                            token_out: replacement,
+                            rule_id: "custom_override:\(source)",
+                            action: "normalized"
+                        )
+                    )
+                }
             }
         }
 

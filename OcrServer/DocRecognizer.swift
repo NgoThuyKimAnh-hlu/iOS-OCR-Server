@@ -12,22 +12,34 @@ import Vision
 class DocRecognizer {
     let usesLanguageCorrection : Bool
     let automaticallyDetectsLanguage : Bool
+    let recognitionLanguages: [String]
+    let minimumTextHeight: Double
+    let customWords: [String]
     
-    init(usesLanguageCorrection: Bool = true, automaticallyDetectsLanguage: Bool = true) {
+    init(
+        usesLanguageCorrection: Bool = true,
+        automaticallyDetectsLanguage: Bool = true,
+        recognitionLanguages: [String] = ["vi-VT", "en"],
+        minimumTextHeight: Double = 0,
+        customWords: [String] = []
+    ) {
         self.usesLanguageCorrection = usesLanguageCorrection
         self.automaticallyDetectsLanguage = automaticallyDetectsLanguage
+        self.recognitionLanguages = recognitionLanguages
+        self.minimumTextHeight = minimumTextHeight
+        self.customWords = customWords
     }
 
     func recognizeParagraphText(from imageData: Data) async -> String {
             var request = RecognizeDocumentsRequest()
-            // === Điểm KHÁC BIỆT DUY NHẤT của fork so với app gốc (Settings KHÔNG làm được) ===
-            // App gốc không có ô chọn ngôn ngữ → RecognizeDocumentsRequest mặc định nhận diện en-US
-            // → gốc lỗi OCR tiếng Việt ở Nghị định 255. Ghim "vi" là bắt buộc.
-            // Hai dòng dưới đi CÙNG NHAU: pin recognitionLanguages chỉ hiệu lực khi auto-detect TẮT.
-            request.textRecognitionOptions.recognitionLanguages = [Locale.Language(identifier: "vi")]
-            request.textRecognitionOptions.automaticallyDetectLanguage = false
-            // useLanguageCorrection vẫn để Settings điều khiển → là biến A/B khi benchmark (on vs off).
+            // Keep Vietnamese first by default while allowing remote per-request overrides.
+            request.textRecognitionOptions.recognitionLanguages = recognitionLanguages.map {
+                Locale.Language(identifier: $0)
+            }
+            request.textRecognitionOptions.automaticallyDetectLanguage = automaticallyDetectsLanguage
             request.textRecognitionOptions.useLanguageCorrection = usesLanguageCorrection
+            request.textRecognitionOptions.minimumTextHeightFraction = Float(minimumTextHeight)
+            request.textRecognitionOptions.customWords = customWords
             request.textRecognitionOptions.maximumCandidateCount = 1
 
             let observations = try? await request.perform(on: imageData)

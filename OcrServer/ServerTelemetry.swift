@@ -50,6 +50,12 @@ struct OCRImproveHealthStatus: Content, Sendable {
     let corrections_total: Int
     let default_pack: String
     let pack_version: String
+    let active_pack: String
+    let customization_version: Int
+    let customization_hash: String
+    let custom_words: Int
+    let custom_overrides: Int
+    let custom_packs: Int
 }
 
 struct ServerHealthResponse: Content, Sendable {
@@ -152,7 +158,11 @@ final class ServerTelemetry: ObservableObject {
         Array(logs.suffix(max(0, limit)))
     }
 
-    func healthResponse(port: Int, keepAlive: Bool) -> ServerHealthResponse {
+    func healthResponse(
+        port: Int,
+        keepAlive: Bool,
+        customization: OCRCustomizationSummary
+    ) -> ServerHealthResponse {
         let device = UIDevice.current
         let level = device.batteryLevel >= 0
             ? Int((device.batteryLevel * 100).rounded())
@@ -182,13 +192,27 @@ final class ServerTelemetry: ObservableObject {
                 unigram_entries: VNLegalCorrector.unigramEntryCount,
                 corrections_total: ocrCorrectionsTotal,
                 default_pack: "minimal",
-                pack_version: "2026.07.22.1"
+                pack_version: "2026.07.22.1",
+                active_pack: Settings.shared.activePack,
+                customization_version: customization.version,
+                customization_hash: customization.hash,
+                custom_words: customization.custom_words,
+                custom_overrides: customization.custom_overrides,
+                custom_packs: customization.custom_packs
             )
         )
     }
 
-    func statsResponse(port: Int, keepAlive: Bool) -> ServerStatsResponse {
-        let health = healthResponse(port: port, keepAlive: keepAlive)
+    func statsResponse(
+        port: Int,
+        keepAlive: Bool,
+        customization: OCRCustomizationSummary
+    ) -> ServerStatsResponse {
+        let health = healthResponse(
+            port: port,
+            keepAlive: keepAlive,
+            customization: customization
+        )
         return ServerStatsResponse(
             status: health.status,
             uptime_s: health.uptime_s,

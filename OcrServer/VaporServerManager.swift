@@ -17,10 +17,8 @@ final class VaporServerManager: ObservableObject {
     private var lifecycleTask: Task<Void, Never>?
     private var watchdogTask: Task<Void, Never>?
     private var bonjourService: NetService?
-    private let primaryPort = 8000
-    private let fallbackPorts = 8001...8010
     
-    @Published private(set) var port: Int = 8000
+    @Published private(set) var port: Int = Settings.shared.httpPort
 
     @Published var status: String = ""
     @Published var networkAddresses: [String: String] = [:]
@@ -30,7 +28,6 @@ final class VaporServerManager: ObservableObject {
     let networkInterfaces = ["en0", "en1", "en2", "en3", "en4", "en5"]
 
     init() {
-        Settings.shared.httpPort = primaryPort
         NotificationCenter.default.publisher(for: .vaporServerShouldRestart)
             .receive(on: RunLoop.main)
             .sink { [weak self] notification in
@@ -86,7 +83,7 @@ final class VaporServerManager: ObservableObject {
 
     private func configureServer(port: Int) async {
         let level: RecognizeTextRequest.RecognitionLevel =
-                (Settings.shared.recognitionLevel == "Fast") ? .fast : .accurate
+                (Settings.shared.recognitionLevel.lowercased() == "fast") ? .fast : .accurate
         
         await server.configure(
             port: port,
@@ -166,6 +163,7 @@ final class VaporServerManager: ObservableObject {
 
     private func startUsingPortPolicy() async throws -> Int {
         var lastError: Error?
+        let primaryPort = Settings.shared.httpPort
 
         for attempt in 1...5 {
             await configureServer(port: primaryPort)
@@ -185,6 +183,10 @@ final class VaporServerManager: ObservableObject {
             }
         }
 
+        let fallbackPorts = (1...10).compactMap { offset -> Int? in
+            let candidate = primaryPort + offset
+            return candidate <= 65_535 ? candidate : nil
+        }
         for fallbackPort in fallbackPorts {
             await configureServer(port: fallbackPort)
             do {
@@ -205,7 +207,10 @@ final class VaporServerManager: ObservableObject {
 
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(nanoseconds: 60_000_000_000)
+                    let interval = max(10, Settings.shared.watchdogIntervalSeconds)
+                    try await Task.sleep(
+                        nanoseconds: UInt64(interval * 1_000_000_000)
+                    )
                 } catch {
                     return
                 }

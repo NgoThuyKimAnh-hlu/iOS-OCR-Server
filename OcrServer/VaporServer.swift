@@ -355,41 +355,114 @@ struct ComputeErrorResponse: Content {
     let message: String
 }
 
+struct AdminSettingDescriptor: Content, Sendable {
+    let key: String
+    let type: String
+    let minimum: Double?
+    let maximum: Double?
+    let options: [String]?
+    let requires_restart: Bool
+    let secret: Bool
+}
+
 struct AdminSettingsResponse: Content, Sendable {
+    let schema: [AdminSettingDescriptor]
     let recognition_level: String
+    let recognition_languages: [String]
+    let uses_language_correction: Bool
     let language_correction: Bool
     let automatically_detects_language: Bool
-    let keep_alive: Bool
-    let http_port: Int
-    let admin_token_configured: Bool
+    let minimum_text_height: Double
+    let vision_revision: Int
     let improve: Bool
+    let corrector_groups: [String]
+    let active_pack: String
+    let ambiguous_skip: Bool
     let confidence_threshold: Double
     let multipass: Bool
     let roi_upscale: Double
-    let corrector_groups: [String]
-    let active_pack: String
+    let max_roi_count: Int
+    let page_score_pass2_threshold: Double
+    let legal_id_regex: String
+    let possible_legal_id_regex: String
+    let candidate_gap_threshold: Double
+    let candidate_gap_confidence_threshold: Double
+    let candidate_gap_normalizer: Double
+    let line_confidence_weight: Double
+    let missing_page_number_min_pages: Int
+    let broken_table_min_lines: Int
+    let low_confidence_penalty: Double
+    let invalid_legal_id_penalty: Double
+    let missing_page_number_penalty: Double
+    let broken_table_penalty: Double
+    let multipass_min_confidence_gain: Double
+    let multipass_legal_id_tolerance: Double
+    let multipass_min_length_ratio: Double
+    let multipass_max_length_ratio: Double
+    let pdf_dpi: Int
+    let pdf_max_pages: Int
+    let rectify_default: Bool
+    let http_port: Int
+    let keep_alive: Bool
+    let watchdog_interval_s: Double
     let debug_verbose: Bool
+    let admin_token: String
+    let admin_token_configured: Bool
 }
 
 struct AdminSettingsPatch: Content, Sendable {
     let recognition_level: String?
+    let recognition_languages: [String]?
+    let uses_language_correction: Bool?
     let language_correction: Bool?
     let automatically_detects_language: Bool?
-    let keep_alive: Bool?
-    let http_port: Int?
-    let admin_token: String?
+    let minimum_text_height: Double?
+    let vision_revision: Int?
     let improve: Bool?
+    let corrector_groups: [String]?
+    let active_pack: String?
+    let ambiguous_skip: Bool?
     let confidence_threshold: Double?
     let multipass: Bool?
     let roi_upscale: Double?
-    let corrector_groups: [String]?
-    let active_pack: String?
+    let max_roi_count: Int?
+    let page_score_pass2_threshold: Double?
+    let legal_id_regex: String?
+    let possible_legal_id_regex: String?
+    let candidate_gap_threshold: Double?
+    let candidate_gap_confidence_threshold: Double?
+    let candidate_gap_normalizer: Double?
+    let line_confidence_weight: Double?
+    let missing_page_number_min_pages: Int?
+    let broken_table_min_lines: Int?
+    let low_confidence_penalty: Double?
+    let invalid_legal_id_penalty: Double?
+    let missing_page_number_penalty: Double?
+    let broken_table_penalty: Double?
+    let multipass_min_confidence_gain: Double?
+    let multipass_legal_id_tolerance: Double?
+    let multipass_min_length_ratio: Double?
+    let multipass_max_length_ratio: Double?
+    let pdf_dpi: Int?
+    let pdf_max_pages: Int?
+    let rectify_default: Bool?
+    let http_port: Int?
+    let keep_alive: Bool?
+    let watchdog_interval_s: Double?
     let debug_verbose: Bool?
+    let admin_token: String?
 }
 
 struct AdminApplyResponse: Content, Sendable {
     let applied: [String]
+    let rejected: [String]
     let restarted: Bool
+
+    init(applied: [String], rejected: [String] = [], restarted: Bool) {
+        self.applied = applied
+        self.rejected = rejected
+        self.restarted = restarted
+    }
 }
 
 struct AdminRestartResponse: Content, Sendable {
@@ -406,41 +479,44 @@ struct AdminLogResponse: Content, Sendable {
     let count: Int
 }
 
-private enum AdminSettingsError: LocalizedError {
-    case invalidRecognitionLevel
-    case pinnedPort
-    case emptyPatch
-    case invalidConfidenceThreshold
-    case invalidROIUpscale
-    case invalidCorrectorGroups
-    case invalidActivePack
+struct AdminCustomWordsRequest: Content, Sendable { let words: [String] }
+struct AdminCorrectionsRequest: Content, Sendable { let overrides: [String: String] }
+struct AdminPackRequest: Content, Sendable {
+    let id: String
+    let words: [String]
+    let overrides: [String: String]
+}
 
-    var errorDescription: String? {
-        switch self {
-        case .invalidRecognitionLevel:
-            return "recognition_level must be Accurate or Fast"
-        case .pinnedPort:
-            return "http_port is pinned to 8000"
-        case .emptyPatch:
-            return "No supported setting was provided"
-        case .invalidConfidenceThreshold:
-            return "confidence_threshold must be between 0.05 and 0.99"
-        case .invalidROIUpscale:
-            return "roi_upscale must be between 1.0 and 4.0"
-        case .invalidCorrectorGroups:
-            return "corrector_groups contains an unknown rule group"
-        case .invalidActivePack:
-            return "active_pack must be auto, none, minimal, legal, tax, or customs"
-        }
-    }
+struct AdminServicesPatch: Content, Sendable {
+    let ocr: Bool?
+    let dococr: Bool?
+    let translate: Bool?
+    let transcribe: Bool?
+    let synthesize: Bool?
+    let llm: Bool?
+    let ner: Bool?
+    let embed: Bool?
+    let coreml: Bool?
+    let barcode: Bool?
+}
+
+struct AdminServicesResponse: Content, Sendable {
+    let services: [String: Bool]
+    let applied: [String]
 }
 
 private struct OCRRequestOptions: Decodable {
     let dpi: Int?
     let max_pages: Int?
-    let rectify: Int?
-    let improve: Int?
-    let raw: Int?
+    let rectify: String?
+    let improve: String?
+    let raw: String?
+    let groups: String?
+    let level: String?
+    let langs: String?
+    let multipass: String?
+    let conf: Double?
+    let upscale: Double?
     let loai_van_ban: String?
     let co_quan: String?
     let nam: String?
@@ -579,10 +655,12 @@ actor VaporServer {
         app.get("health") { [weak self] req async throws -> Response in
             guard let self else { throw Abort(.internalServerError) }
             let port = await self.port
+            let customization = try await OCRCustomizationStore.shared.summary()
             let health = await MainActor.run {
                 ServerTelemetry.shared.healthResponse(
                     port: port,
-                    keepAlive: KeepAliveService.shared.isActive
+                    keepAlive: KeepAliveService.shared.isActive,
+                    customization: customization
                 )
             }
             return try Self.jsonResponse(.ok, health)
@@ -591,10 +669,12 @@ actor VaporServer {
         app.get("stats") { [weak self] req async throws -> Response in
             guard let self else { throw Abort(.internalServerError) }
             let port = await self.port
+            let customization = try await OCRCustomizationStore.shared.summary()
             let stats = await MainActor.run {
                 ServerTelemetry.shared.statsResponse(
                     port: port,
-                    keepAlive: KeepAliveService.shared.isActive
+                    keepAlive: KeepAliveService.shared.isActive,
+                    customization: customization
                 )
             }
             return try Self.jsonResponse(.ok, stats)
@@ -602,7 +682,7 @@ actor VaporServer {
 
         app.get("admin") { [weak self] req async throws -> Response in
             guard let self else { throw Abort(.internalServerError) }
-            return Self.htmlResponse(Self.adminHTML(port: await self.port))
+            return Self.htmlResponse(Self.adminHTMLV3(port: await self.port))
         }
 
         app.get("admin", "settings") { req async throws -> Response in
@@ -628,8 +708,13 @@ actor VaporServer {
             }
 
             do {
+                let bundlePackIDs = try await DomainPackManager.shared.packIDs()
+                let customPackIDs = try await OCRCustomizationStore.shared.packIDs()
                 let outcome = try await MainActor.run {
-                    try Self.applyAdminSettings(patch)
+                    Self.applyAdminSettings(
+                        patch,
+                        knownPackIDs: bundlePackIDs.union(customPackIDs)
+                    )
                 }
                 if outcome.restarted {
                     Self.scheduleServerRestart(reason: "/admin/settings")
@@ -637,7 +722,7 @@ actor VaporServer {
                 return try Self.jsonResponse(.ok, outcome)
             } catch {
                 return try Self.jsonResponse(
-                    .badRequest,
+                    .internalServerError,
                     ComputeErrorResponse(success: false, message: error.localizedDescription)
                 )
             }
@@ -678,9 +763,104 @@ actor VaporServer {
             )
         }
 
+        app.get("admin", "customwords") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            return try Self.jsonResponse(
+                .ok,
+                try await OCRCustomizationStore.shared.customWords()
+            )
+        }
+
+        app.post("admin", "customwords") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            let payload = try req.content.decode(AdminCustomWordsRequest.self)
+            try Self.validateWords(payload.words)
+            let mode = ((try? req.query.get(String.self, at: "mode")) ?? "replace").lowercased()
+            guard mode == "replace" || mode == "append" else {
+                throw Abort(.badRequest, reason: "mode must be replace or append")
+            }
+            let response = try await OCRCustomizationStore.shared.setCustomWords(
+                payload.words,
+                append: mode == "append"
+            )
+            return try Self.jsonResponse(.ok, response)
+        }
+
+        app.get("admin", "corrections") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            return try Self.jsonResponse(
+                .ok,
+                try await OCRCustomizationStore.shared.corrections()
+            )
+        }
+
+        app.post("admin", "corrections") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            let payload = try req.content.decode(AdminCorrectionsRequest.self)
+            try Self.validateOverrides(payload.overrides)
+            return try Self.jsonResponse(
+                .ok,
+                try await OCRCustomizationStore.shared.mergeCorrections(payload.overrides)
+            )
+        }
+
+        app.post("admin", "pack") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            let payload = try req.content.decode(AdminPackRequest.self)
+            try Self.validatePackID(payload.id)
+            try Self.validateWords(payload.words)
+            try Self.validateOverrides(payload.overrides)
+            return try Self.jsonResponse(
+                .ok,
+                try await OCRCustomizationStore.shared.savePack(
+                    id: payload.id,
+                    words: payload.words,
+                    overrides: payload.overrides
+                )
+            )
+        }
+
+        app.get("admin", "packs") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            let bundled = try await DomainPackManager.shared.packSummaries()
+            let custom = try await OCRCustomizationStore.shared.packSummaries()
+            let activePack = await MainActor.run { Settings.shared.activePack }
+            return try Self.jsonResponse(
+                .ok,
+                OCRPacksResponse(
+                    packs: (bundled + custom).sorted { $0.id < $1.id },
+                    active_pack: activePack
+                )
+            )
+        }
+
+        app.post("admin", "lexicon", "reset") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            let response = try await OCRCustomizationStore.shared.reset()
+            await MainActor.run { Settings.shared.activePack = "auto" }
+            return try Self.jsonResponse(.ok, response)
+        }
+
+        app.get("admin", "services") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            let services = await MainActor.run { Settings.shared.serviceStates() }
+            return try Self.jsonResponse(
+                .ok,
+                AdminServicesResponse(services: services, applied: [])
+            )
+        }
+
+        app.post("admin", "services") { req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            let patch = try req.content.decode(AdminServicesPatch.self)
+            let response = await MainActor.run { Self.applyServices(patch) }
+            return try Self.jsonResponse(.ok, response)
+        }
+
         app.on(.POST, "debug", "ocr", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
             try await Self.requireDebugEnabled()
             try await Self.requireAdminToken(request: req)
+            try await Self.requireService(.ocr)
             guard let self else { throw Abort(.internalServerError) }
 
             let upload: OCRUploadPayload
@@ -716,16 +896,15 @@ actor VaporServer {
                     ComputeErrorResponse(success: false, message: "/debug/ocr accepts one image, not PDF")
                 )
             }
+            let baseRuntime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
+            let runtime = try Self.runtimeSettings(options: options, base: baseRuntime)
+            let rectify = Self.booleanValue(options.rectify) ?? runtime.rectifyDefault
             let processed: RectifiedImage
-            if options.rectify == 1 {
+            if rectify {
                 processed = await ImageProcessingService.shared.rectify(data: data)
             } else {
                 processed = RectifiedImage(data: data, rectified: false)
             }
-            let recognitionLevel = await self.recognitionLevel
-            let usesLanguageCorrection = await self.usesLanguageCorrection
-            let automaticallyDetectsLanguage = await self.automaticallyDetectsLanguage
-            let runtime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
             let improve = Self.improveRequested(options: options, runtime: runtime)
             let metadata = Self.domainMetadata(
                 options: options,
@@ -736,9 +915,7 @@ actor VaporServer {
             do {
                 guard let result = try await OCRImprovementService.shared.processImage(
                     data: processed.data,
-                    recognitionLevel: recognitionLevel,
-                    usesLanguageCorrection: usesLanguageCorrection,
-                    automaticallyDetectsLanguage: automaticallyDetectsLanguage,
+                    visionConfiguration: runtime.visionConfiguration,
                     metadata: metadata,
                     improve: improve,
                     configuration: runtime.improvementConfiguration,
@@ -754,9 +931,9 @@ actor VaporServer {
                     result: result,
                     runtime: runtime,
                     improve: improve,
-                    recognitionLevel: recognitionLevel == .fast ? "Fast" : "Accurate",
-                    usesLanguageCorrection: usesLanguageCorrection,
-                    automaticallyDetectsLanguage: automaticallyDetectsLanguage
+                    recognitionLevel: runtime.recognitionLevel,
+                    usesLanguageCorrection: runtime.usesLanguageCorrection,
+                    automaticallyDetectsLanguage: runtime.automaticallyDetectsLanguage
                 )
                 await OCRDebugStore.shared.append(trace)
                 return try Self.jsonResponse(.ok, trace)
@@ -973,6 +1150,7 @@ actor VaporServer {
 
         // POST /upload
         app.on(.POST, "upload", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
+            try await Self.requireService(.ocr)
             guard let self else { throw Abort(.internalServerError) }
 
             let upload: OCRUploadPayload
@@ -1016,11 +1194,10 @@ actor VaporServer {
                 )
             }
 
-            let recognitionLevel = await self.recognitionLevel
-            let usesLanguageCorrection = await self.usesLanguageCorrection
-            let automaticallyDetectsLanguage = await self.automaticallyDetectsLanguage
             let data = Self.byteBufferToData(upload.file.data)
-            let runtime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
+            let baseRuntime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
+            let runtime = try Self.runtimeSettings(options: options, base: baseRuntime)
+            let rectify = Self.booleanValue(options.rectify) ?? runtime.rectifyDefault
             let improve = Self.improveRequested(options: options, runtime: runtime)
             let metadata = Self.domainMetadata(
                 options: options,
@@ -1032,24 +1209,22 @@ actor VaporServer {
                 do {
                     let rendered = try await ImageProcessingService.shared.renderPDF(
                         data: data,
-                        dpi: options.dpi ?? 200,
-                        maximumPages: options.max_pages ?? 50
+                        dpi: options.dpi ?? runtime.pdfDPI,
+                        maximumPages: options.max_pages ?? runtime.pdfMaximumPages
                     )
                     var pages: [PDFUploadPageResponse] = []
                     pages.reserveCapacity(rendered.pages.count)
 
                     for page in rendered.pages {
                         let processed: RectifiedImage
-                        if options.rectify == 1 {
+                        if rectify {
                             processed = await ImageProcessingService.shared.rectify(data: page.imageData)
                         } else {
                             processed = RectifiedImage(data: page.imageData, rectified: false)
                         }
                         let result = try await OCRImprovementService.shared.processImage(
                             data: processed.data,
-                            recognitionLevel: recognitionLevel,
-                            usesLanguageCorrection: usesLanguageCorrection,
-                            automaticallyDetectsLanguage: automaticallyDetectsLanguage,
+                            visionConfiguration: runtime.visionConfiguration,
                             metadata: metadata,
                             improve: improve,
                             pageNumber: page.pageNumber,
@@ -1063,9 +1238,9 @@ actor VaporServer {
                                 result: result,
                                 runtime: runtime,
                                 improve: improve,
-                                recognitionLevel: recognitionLevel,
-                                usesLanguageCorrection: usesLanguageCorrection,
-                                automaticallyDetectsLanguage: automaticallyDetectsLanguage
+                                recognitionLevel: runtime.recognitionLevel,
+                                usesLanguageCorrection: runtime.usesLanguageCorrection,
+                                automaticallyDetectsLanguage: runtime.automaticallyDetectsLanguage
                             )
                         }
                         pages.append(
@@ -1074,7 +1249,7 @@ actor VaporServer {
                                 success: result != nil,
                                 message: result == nil ? "OCR failed" : "OCR completed successfully",
                                 improvement: result,
-                                rectified: options.rectify == 1 ? processed.rectified : nil
+                                rectified: rectify ? processed.rectified : nil
                             )
                         )
                     }
@@ -1098,7 +1273,7 @@ actor VaporServer {
             }
 
             let processed: RectifiedImage
-            if options.rectify == 1 {
+            if rectify {
                 processed = await ImageProcessingService.shared.rectify(data: data)
             } else {
                 processed = RectifiedImage(data: data, rectified: false)
@@ -1108,9 +1283,7 @@ actor VaporServer {
             do {
                 result = try await OCRImprovementService.shared.processImage(
                     data: processed.data,
-                    recognitionLevel: recognitionLevel,
-                    usesLanguageCorrection: usesLanguageCorrection,
-                    automaticallyDetectsLanguage: automaticallyDetectsLanguage,
+                    visionConfiguration: runtime.visionConfiguration,
                     metadata: metadata,
                     improve: improve,
                     configuration: runtime.improvementConfiguration,
@@ -1128,9 +1301,9 @@ actor VaporServer {
                     result: result,
                     runtime: runtime,
                     improve: improve,
-                    recognitionLevel: recognitionLevel,
-                    usesLanguageCorrection: usesLanguageCorrection,
-                    automaticallyDetectsLanguage: automaticallyDetectsLanguage
+                    recognitionLevel: runtime.recognitionLevel,
+                    usesLanguageCorrection: runtime.usesLanguageCorrection,
+                    automaticallyDetectsLanguage: runtime.automaticallyDetectsLanguage
                 )
             }
             
@@ -1144,7 +1317,7 @@ actor VaporServer {
                         image_width: 0,
                         image_height: 0,
                         ocr_boxes: [],
-                        rectified: options.rectify == 1 ? processed.rectified : nil
+                        rectified: rectify ? processed.rectified : nil
                     )
                 )
             }
@@ -1159,7 +1332,7 @@ actor VaporServer {
                         image_width: result?.ocrResult.image_width ?? 0,
                         image_height: result?.ocrResult.image_height ?? 0,
                         ocr_boxes: result?.ocrResult.boxes ?? [],
-                        rectified: options.rectify == 1 ? processed.rectified : nil,
+                        rectified: rectify ? processed.rectified : nil,
                         improvement: result
                     )
                 )
@@ -1185,6 +1358,7 @@ actor VaporServer {
 
         // POST /batch
         app.on(.POST, "batch", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
+            try await Self.requireService(.ocr)
             guard let self else { throw Abort(.internalServerError) }
 
             let files: [ParsedMultipartFile]
@@ -1197,13 +1371,21 @@ actor VaporServer {
                 )
             }
 
-            let recognitionLevel = await self.recognitionLevel
-            let usesLanguageCorrection = await self.usesLanguageCorrection
-            let automaticallyDetectsLanguage = await self.automaticallyDetectsLanguage
+            let runtime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
+            let metadata = OCRDomainMetadata(
+                documentType: nil,
+                agency: nil,
+                year: nil,
+                requestedPack: runtime.activePack
+            )
+            let pack = try await OCRImprovementService.shared.resolvePack(metadata: metadata)
             let textRecognizer = TextRecognizer(
-                recognitionLevel: recognitionLevel,
-                usesLanguageCorrection: usesLanguageCorrection,
-                automaticallyDetectsLanguage: automaticallyDetectsLanguage
+                recognitionLevel: runtime.visionConfiguration.recognitionLevel,
+                recognitionLanguages: runtime.recognitionLanguages,
+                usesLanguageCorrection: runtime.usesLanguageCorrection,
+                automaticallyDetectsLanguage: runtime.automaticallyDetectsLanguage,
+                minimumTextHeight: runtime.minimumTextHeight,
+                visionRevision: runtime.visionRevision
             )
 
             var responses: [BatchUploadResponse] = []
@@ -1224,7 +1406,10 @@ actor VaporServer {
                     continue
                 }
 
-                let result = await textRecognizer.getOcrResult(data: file.data)
+                let result = await textRecognizer.getOcrResult(
+                    data: file.data,
+                    customWords: pack.words
+                )
                 responses.append(
                     BatchUploadResponse(
                         filename: file.filename,
@@ -1243,6 +1428,7 @@ actor VaporServer {
 
         // POST /barcode
         app.on(.POST, "barcode", body: .collect(maxSize: "100mb")) { req async throws -> Response in
+            try await Self.requireService(.barcode)
             struct BarcodeUpload: Content { var file: File }
 
             let upload: BarcodeUpload
@@ -1287,6 +1473,7 @@ actor VaporServer {
         
         // POST /translate
         app.on(.POST, "translate", body: .collect(maxSize: "2mb")) { req async throws -> Response in
+            try await Self.requireService(.translate)
             let payload: TranslateRequestBody
             do {
                 payload = try req.content.decode(TranslateRequestBody.self)
@@ -1337,6 +1524,7 @@ actor VaporServer {
 
         // POST /transcribe
         app.on(.POST, "transcribe", body: .collect(maxSize: "100mb")) { req async throws -> Response in
+            try await Self.requireService(.transcribe)
             let contentType = (req.headers.first(name: .contentType) ?? "").lowercased()
             let audioData: Data
             let fileExtension: String
@@ -1411,6 +1599,7 @@ actor VaporServer {
 
         // POST /synthesize
         app.on(.POST, "synthesize", body: .collect(maxSize: "2mb")) { req async throws -> Response in
+            try await Self.requireService(.synthesize)
             let payload: SynthesizeRequestBody
             do {
                 payload = try req.content.decode(SynthesizeRequestBody.self)
@@ -1449,6 +1638,7 @@ actor VaporServer {
 
         // POST /llm
         app.on(.POST, "llm", body: .collect(maxSize: "2mb")) { req async throws -> Response in
+            try await Self.requireService(.llm)
             let payload: LLMRequestBody
             do {
                 payload = try req.content.decode(LLMRequestBody.self)
@@ -1504,6 +1694,7 @@ actor VaporServer {
 
         // POST /ner
         app.on(.POST, "ner", body: .collect(maxSize: "2mb")) { req async throws -> Response in
+            try await Self.requireService(.ner)
             let payload: NERRequestBody
             do {
                 payload = try req.content.decode(NERRequestBody.self)
@@ -1542,6 +1733,7 @@ actor VaporServer {
 
         // POST /embed
         app.on(.POST, "embed", body: .collect(maxSize: "2mb")) { req async throws -> Response in
+            try await Self.requireService(.embed)
             let payload: EmbedRequestBody
             do {
                 payload = try req.content.decode(EmbedRequestBody.self)
@@ -1584,6 +1776,7 @@ actor VaporServer {
 
         // POST /coreml/upload
         app.on(.POST, "coreml", "upload", body: .collect(maxSize: "500mb")) { req async throws -> Response in
+            try await Self.requireService(.coreml)
             struct ModelUpload: Content { var file: File }
 
             let upload: ModelUpload
@@ -1632,6 +1825,7 @@ actor VaporServer {
 
         // GET /coreml/info?model_id=...
         app.get("coreml", "info") { req async throws -> Response in
+            try await Self.requireService(.coreml)
             guard let modelID = try? req.query.get(String.self, at: "model_id"),
                   !modelID.isEmpty else {
                 return try Self.jsonResponse(
@@ -1666,6 +1860,7 @@ actor VaporServer {
 
         // POST /coreml/predict
         app.on(.POST, "coreml", "predict", body: .collect(maxSize: "100mb")) { req async throws -> Response in
+            try await Self.requireService(.coreml)
             let payload: CoreMLPredictRequestBody
             do {
                 payload = try req.content.decode(CoreMLPredictRequestBody.self)
@@ -1708,6 +1903,7 @@ actor VaporServer {
 
         // POST /coreml/delete?model_id=...
         app.post("coreml", "delete") { req async throws -> Response in
+            try await Self.requireService(.coreml)
             guard let modelID = try? req.query.get(String.self, at: "model_id"),
                   !modelID.isEmpty else {
                 return try Self.jsonResponse(
@@ -1737,6 +1933,7 @@ actor VaporServer {
 
         // POST /docOCR
         app.on(.POST, "docOCR", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
+            try await Self.requireService(.dococr)
             if #unavailable(iOS 26) {
                 return try Self.jsonResponse(
                     .ok,
@@ -1785,37 +1982,40 @@ actor VaporServer {
                 )
             }
 
-            let recognitionLevel = await self.recognitionLevel
-            let usesLanguageCorrection = await self.usesLanguageCorrection
-            let automaticallyDetectsLanguage = await self.automaticallyDetectsLanguage
             let data = Self.byteBufferToData(upload.file.data)
-            let runtime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
+            let baseRuntime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
+            let runtime = try Self.runtimeSettings(options: options, base: baseRuntime)
+            let rectify = Self.booleanValue(options.rectify) ?? runtime.rectifyDefault
             let improve = Self.improveRequested(options: options, runtime: runtime)
             let metadata = Self.domainMetadata(
                 options: options,
                 upload: upload,
                 activePack: runtime.activePack
             )
+            let pack = try await OCRImprovementService.shared.resolvePack(metadata: metadata)
 
             if #available(iOS 26, *) {
                 let docRecognizer = DocRecognizer(
-                    usesLanguageCorrection: usesLanguageCorrection,
-                    automaticallyDetectsLanguage: automaticallyDetectsLanguage
+                    usesLanguageCorrection: runtime.usesLanguageCorrection,
+                    automaticallyDetectsLanguage: runtime.automaticallyDetectsLanguage,
+                    recognitionLanguages: runtime.recognitionLanguages,
+                    minimumTextHeight: runtime.minimumTextHeight,
+                    customWords: pack.words
                 )
 
                 if Self.isPDF(data) {
                     do {
                         let rendered = try await ImageProcessingService.shared.renderPDF(
                             data: data,
-                            dpi: options.dpi ?? 200,
-                            maximumPages: options.max_pages ?? 50
+                            dpi: options.dpi ?? runtime.pdfDPI,
+                            maximumPages: options.max_pages ?? runtime.pdfMaximumPages
                         )
                         var pages: [PDFDocOCRPageResponse] = []
                         pages.reserveCapacity(rendered.pages.count)
 
                         for page in rendered.pages {
                             let processed: RectifiedImage
-                            if options.rectify == 1 {
+                            if rectify {
                                 processed = await ImageProcessingService.shared.rectify(
                                     data: page.imageData
                                 )
@@ -1831,15 +2031,14 @@ actor VaporServer {
                             let result = try await OCRImprovementService.shared.processDocument(
                                 data: processed.data,
                                 documentText: text,
-                                recognitionLevel: recognitionLevel,
-                                usesLanguageCorrection: usesLanguageCorrection,
-                                automaticallyDetectsLanguage: automaticallyDetectsLanguage,
+                                visionConfiguration: runtime.visionConfiguration,
                                 metadata: metadata,
                                 improve: improve,
                                 pageNumber: page.pageNumber,
                                 pageCount: rendered.totalPageCount,
                                 configuration: runtime.improvementConfiguration,
-                                collectTrace: runtime.debugVerbose
+                                collectTrace: runtime.debugVerbose,
+                                resolvedPack: pack
                             )
                             if let result {
                                 await Self.recordDebugTraceIfNeeded(
@@ -1847,9 +2046,9 @@ actor VaporServer {
                                     result: result,
                                     runtime: runtime,
                                     improve: improve,
-                                    recognitionLevel: recognitionLevel,
-                                    usesLanguageCorrection: usesLanguageCorrection,
-                                    automaticallyDetectsLanguage: automaticallyDetectsLanguage
+                                    recognitionLevel: runtime.recognitionLevel,
+                                    usesLanguageCorrection: runtime.usesLanguageCorrection,
+                                    automaticallyDetectsLanguage: runtime.automaticallyDetectsLanguage
                                 )
                             }
                             pages.append(
@@ -1858,7 +2057,7 @@ actor VaporServer {
                                     success: result != nil,
                                     message: result == nil ? "OCR failed" : "OCR completed successfully",
                                     improvement: result,
-                                    rectified: options.rectify == 1 ? processed.rectified : nil
+                                    rectified: rectify ? processed.rectified : nil
                                 )
                             )
                         }
@@ -1885,7 +2084,7 @@ actor VaporServer {
                 }
 
                 let processed: RectifiedImage
-                if options.rectify == 1 {
+                if rectify {
                     processed = await ImageProcessingService.shared.rectify(data: data)
                 } else {
                     processed = RectifiedImage(data: data, rectified: false)
@@ -1897,13 +2096,12 @@ actor VaporServer {
                     result = try await OCRImprovementService.shared.processDocument(
                         data: processed.data,
                         documentText: resultText,
-                        recognitionLevel: recognitionLevel,
-                        usesLanguageCorrection: usesLanguageCorrection,
-                        automaticallyDetectsLanguage: automaticallyDetectsLanguage,
+                        visionConfiguration: runtime.visionConfiguration,
                         metadata: metadata,
                         improve: improve,
                         configuration: runtime.improvementConfiguration,
-                        collectTrace: runtime.debugVerbose
+                        collectTrace: runtime.debugVerbose,
+                        resolvedPack: pack
                     )
                 } catch {
                     return try Self.jsonResponse(
@@ -1917,9 +2115,9 @@ actor VaporServer {
                         result: result,
                         runtime: runtime,
                         improve: improve,
-                        recognitionLevel: recognitionLevel,
-                        usesLanguageCorrection: usesLanguageCorrection,
-                        automaticallyDetectsLanguage: automaticallyDetectsLanguage
+                        recognitionLevel: runtime.recognitionLevel,
+                        usesLanguageCorrection: runtime.usesLanguageCorrection,
+                        automaticallyDetectsLanguage: runtime.automaticallyDetectsLanguage
                     )
                 }
 
@@ -1930,7 +2128,7 @@ actor VaporServer {
                             success: result != nil,
                             message: result == nil ? "OCR quality analysis failed" : "OCR completed successfully",
                             ocr_text: result?.selectedText ?? resultText,
-                            rectified: options.rectify == 1 ? processed.rectified : nil,
+                            rectified: rectify ? processed.rectified : nil,
                             improvement: result
                         )
                     )
@@ -1995,132 +2193,444 @@ actor VaporServer {
         }
     }
 
+    private static func requireService(_ service: ComputeServiceName) async throws {
+        let enabled = await MainActor.run { Settings.shared.serviceEnabled(service) }
+        guard enabled else {
+            throw Abort(.serviceUnavailable, reason: "\(service.rawValue) disabled")
+        }
+    }
+
     @MainActor
     private static func adminSettingsSnapshot() -> AdminSettingsResponse {
         let settings = Settings.shared
         return AdminSettingsResponse(
-            recognition_level: settings.recognitionLevel,
+            schema: adminSettingSchema(),
+            recognition_level: settings.recognitionLevel.lowercased(),
+            recognition_languages: settings.recognitionLanguages,
+            uses_language_correction: settings.languageCorrection,
             language_correction: settings.languageCorrection,
             automatically_detects_language: settings.automaticallyDetectsLanguage,
-            keep_alive: settings.keepAliveEnabled,
-            http_port: 8000,
-            admin_token_configured: !settings.adminToken
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .isEmpty,
+            minimum_text_height: settings.minimumTextHeight,
+            vision_revision: settings.visionRevision,
             improve: settings.improveEnabled,
+            corrector_groups: settings.correctorGroupNames,
+            active_pack: settings.activePack,
+            ambiguous_skip: settings.correctorGroupNames.contains(CorrectorGroup.ambiguousSkip.rawValue),
             confidence_threshold: settings.confidenceThreshold,
             multipass: settings.multipassEnabled,
             roi_upscale: settings.roiUpscale,
-            corrector_groups: settings.correctorGroupNames,
-            active_pack: settings.activePack,
-            debug_verbose: settings.debugVerbose
+            max_roi_count: settings.maximumROIs,
+            page_score_pass2_threshold: settings.pageScorePass2Threshold,
+            legal_id_regex: settings.legalIDRegex,
+            possible_legal_id_regex: settings.possibleLegalIDRegex,
+            candidate_gap_threshold: settings.candidateGapThreshold,
+            candidate_gap_confidence_threshold: settings.candidateGapConfidenceThreshold,
+            candidate_gap_normalizer: settings.candidateGapNormalizer,
+            line_confidence_weight: settings.lineConfidenceWeight,
+            missing_page_number_min_pages: settings.missingPageNumberMinimumPages,
+            broken_table_min_lines: settings.brokenTableMinimumLines,
+            low_confidence_penalty: settings.lowConfidencePenalty,
+            invalid_legal_id_penalty: settings.invalidLegalIDPenalty,
+            missing_page_number_penalty: settings.missingPageNumberPenalty,
+            broken_table_penalty: settings.brokenTablePenalty,
+            multipass_min_confidence_gain: settings.multipassMinimumConfidenceGain,
+            multipass_legal_id_tolerance: settings.multipassLegalIDTolerance,
+            multipass_min_length_ratio: settings.multipassMinimumLengthRatio,
+            multipass_max_length_ratio: settings.multipassMaximumLengthRatio,
+            pdf_dpi: settings.pdfDPI,
+            pdf_max_pages: settings.pdfMaximumPages,
+            rectify_default: settings.rectifyDefault,
+            http_port: settings.httpPort,
+            keep_alive: settings.keepAliveEnabled,
+            watchdog_interval_s: settings.watchdogIntervalSeconds,
+            debug_verbose: settings.debugVerbose,
+            admin_token: settings.adminToken,
+            admin_token_configured: !settings.adminToken
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         )
     }
 
     @MainActor
-    private static func applyAdminSettings(_ patch: AdminSettingsPatch) throws -> AdminApplyResponse {
+    private static func applyAdminSettings(
+        _ patch: AdminSettingsPatch,
+        knownPackIDs: Set<String>
+    ) -> AdminApplyResponse {
         let settings = Settings.shared
         var applied: [String] = []
+        var rejected: [String] = []
         var requiresRestart = false
 
-        let normalizedRecognitionLevel: String?
         if let value = patch.recognition_level {
-            switch value.lowercased() {
-            case "accurate": normalizedRecognitionLevel = "Accurate"
-            case "fast": normalizedRecognitionLevel = "Fast"
-            default: throw AdminSettingsError.invalidRecognitionLevel
-            }
-        } else {
-            normalizedRecognitionLevel = nil
-        }
-        if let value = patch.http_port, value != 8000 {
-            throw AdminSettingsError.pinnedPort
-        }
-        if let value = patch.confidence_threshold, !(0.05...0.99).contains(value) {
-            throw AdminSettingsError.invalidConfidenceThreshold
-        }
-        if let value = patch.roi_upscale, !(1.0...4.0).contains(value) {
-            throw AdminSettingsError.invalidROIUpscale
-        }
-        let validatedGroups: [String]?
-        if let value = patch.corrector_groups {
-            let groups = value.compactMap { CorrectorGroup(rawValue: $0) }
-            guard groups.count == value.count else {
-                throw AdminSettingsError.invalidCorrectorGroups
-            }
-            validatedGroups = Array(Set(groups.map(\.rawValue))).sorted()
-        } else {
-            validatedGroups = nil
-        }
-        let normalizedActivePack: String?
-        if let value = patch.active_pack {
             let normalized = value.lowercased()
-            guard ["auto", "none", "minimal", "legal", "tax", "customs"].contains(normalized) else {
-                throw AdminSettingsError.invalidActivePack
+            if ["accurate", "fast"].contains(normalized) {
+                settings.recognitionLevel = normalized
+                applied.append("recognition_level")
+            } else {
+                rejected.append("recognition_level: expected accurate or fast")
             }
-            normalizedActivePack = normalized
-        } else {
-            normalizedActivePack = nil
         }
-
-        if let normalized = normalizedRecognitionLevel {
-            requiresRestart = requiresRestart || settings.recognitionLevel != normalized
-            settings.recognitionLevel = normalized
-            applied.append("recognition_level")
+        if let value = patch.recognition_languages {
+            let cleaned = value.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            var seen = Set<String>()
+            let unique = cleaned.filter { seen.insert($0).inserted }
+            if !unique.isEmpty, unique.count <= 8,
+               unique.allSatisfy(Self.isValidLanguageIdentifier) {
+                settings.recognitionLanguages = unique
+                applied.append("recognition_languages")
+            } else {
+                rejected.append("recognition_languages: expected 1-8 BCP-47-style identifiers")
+            }
         }
-        if let value = patch.language_correction {
-            requiresRestart = requiresRestart || settings.languageCorrection != value
+        if let value = patch.uses_language_correction ?? patch.language_correction {
             settings.languageCorrection = value
-            applied.append("language_correction")
+            applied.append("uses_language_correction")
         }
         if let value = patch.automatically_detects_language {
-            requiresRestart = requiresRestart || settings.automaticallyDetectsLanguage != value
             settings.automaticallyDetectsLanguage = value
             applied.append("automatically_detects_language")
         }
-        if let value = patch.keep_alive {
-            KeepAliveService.shared.setEnabled(value)
-            applied.append("keep_alive")
+        if let value = patch.minimum_text_height {
+            applyDouble(value, key: "minimum_text_height", range: 0...1, applied: &applied, rejected: &rejected) {
+                settings.minimumTextHeight = $0
+            }
         }
-        if patch.http_port != nil {
-            settings.httpPort = 8000
-            applied.append("http_port")
-        }
-        if let value = patch.admin_token {
-            settings.adminToken = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            applied.append("admin_token")
+        if let value = patch.vision_revision {
+            if value == 0 || value == 3 {
+                settings.visionRevision = value
+                applied.append("vision_revision")
+            } else {
+                rejected.append("vision_revision: supported values are 0 (latest) and 3")
+            }
         }
         if let value = patch.improve {
             settings.improveEnabled = value
             applied.append("improve")
         }
+        if let value = patch.corrector_groups {
+            let groups = value.compactMap(CorrectorGroup.init(rawValue:))
+            if groups.count == value.count {
+                settings.correctorGroupNames = Array(Set(groups.map(\.rawValue))).sorted()
+                applied.append("corrector_groups")
+            } else {
+                rejected.append("corrector_groups: contains an unknown group")
+            }
+        }
+        if let value = patch.ambiguous_skip {
+            var groups = Set(settings.correctorGroupNames)
+            if value {
+                groups.insert(CorrectorGroup.ambiguousSkip.rawValue)
+            } else {
+                groups.remove(CorrectorGroup.ambiguousSkip.rawValue)
+            }
+            settings.correctorGroupNames = groups.sorted()
+            applied.append("ambiguous_skip")
+        }
+        if let value = patch.active_pack {
+            let normalized = value.lowercased()
+            if normalized == "auto" || normalized == "none" || knownPackIDs.contains(normalized) {
+                settings.activePack = normalized
+                applied.append("active_pack")
+            } else {
+                rejected.append("active_pack: pack does not exist")
+            }
+        }
         if let value = patch.confidence_threshold {
-            settings.confidenceThreshold = value
-            applied.append("confidence_threshold")
+            applyDouble(value, key: "confidence_threshold", range: 0...1, applied: &applied, rejected: &rejected) {
+                settings.confidenceThreshold = $0
+            }
         }
         if let value = patch.multipass {
             settings.multipassEnabled = value
             applied.append("multipass")
         }
         if let value = patch.roi_upscale {
-            settings.roiUpscale = value
-            applied.append("roi_upscale")
+            applyDouble(value, key: "roi_upscale", range: 1...4, applied: &applied, rejected: &rejected) {
+                settings.roiUpscale = $0
+            }
         }
-        if let value = validatedGroups {
-            settings.correctorGroupNames = value
-            applied.append("corrector_groups")
+        if let value = patch.max_roi_count {
+            applyInteger(value, key: "max_roi_count", range: 0...20, applied: &applied, rejected: &rejected) {
+                settings.maximumROIs = $0
+            }
         }
-        if let value = normalizedActivePack {
-            settings.activePack = value
-            applied.append("active_pack")
+        if let value = patch.page_score_pass2_threshold {
+            applyDouble(value, key: "page_score_pass2_threshold", range: 0...1, applied: &applied, rejected: &rejected) {
+                settings.pageScorePass2Threshold = $0
+            }
+        }
+        if let value = patch.legal_id_regex {
+            applyRegex(value, key: "legal_id_regex", applied: &applied, rejected: &rejected) {
+                settings.legalIDRegex = $0
+            }
+        }
+        if let value = patch.possible_legal_id_regex {
+            applyRegex(value, key: "possible_legal_id_regex", applied: &applied, rejected: &rejected) {
+                settings.possibleLegalIDRegex = $0
+            }
+        }
+        let doubles: [(Double?, String, ClosedRange<Double>, (Double) -> Void)] = [
+            (patch.candidate_gap_threshold, "candidate_gap_threshold", 0...1, { settings.candidateGapThreshold = $0 }),
+            (patch.candidate_gap_confidence_threshold, "candidate_gap_confidence_threshold", 0...1, { settings.candidateGapConfidenceThreshold = $0 }),
+            (patch.candidate_gap_normalizer, "candidate_gap_normalizer", 0.001...1, { settings.candidateGapNormalizer = $0 }),
+            (patch.line_confidence_weight, "line_confidence_weight", 0...1, { settings.lineConfidenceWeight = $0 }),
+            (patch.low_confidence_penalty, "low_confidence_penalty", 0...1, { settings.lowConfidencePenalty = $0 }),
+            (patch.invalid_legal_id_penalty, "invalid_legal_id_penalty", 0...1, { settings.invalidLegalIDPenalty = $0 }),
+            (patch.missing_page_number_penalty, "missing_page_number_penalty", 0...1, { settings.missingPageNumberPenalty = $0 }),
+            (patch.broken_table_penalty, "broken_table_penalty", 0...1, { settings.brokenTablePenalty = $0 }),
+            (patch.multipass_min_confidence_gain, "multipass_min_confidence_gain", 0...1, { settings.multipassMinimumConfidenceGain = $0 }),
+            (patch.multipass_legal_id_tolerance, "multipass_legal_id_tolerance", 0...1, { settings.multipassLegalIDTolerance = $0 }),
+            (patch.watchdog_interval_s, "watchdog_interval_s", 10...3600, { settings.watchdogIntervalSeconds = $0 }),
+        ]
+        for (value, key, range, setter) in doubles {
+            if let value {
+                applyDouble(value, key: key, range: range, applied: &applied, rejected: &rejected, setter: setter)
+            }
+        }
+        let proposedMinimumLengthRatio = patch.multipass_min_length_ratio
+            ?? settings.multipassMinimumLengthRatio
+        let proposedMaximumLengthRatio = patch.multipass_max_length_ratio
+            ?? settings.multipassMaximumLengthRatio
+        let minimumLengthRatioValid = proposedMinimumLengthRatio.isFinite
+            && (0.1...2).contains(proposedMinimumLengthRatio)
+        let maximumLengthRatioValid = proposedMaximumLengthRatio.isFinite
+            && (0.5...4).contains(proposedMaximumLengthRatio)
+        if patch.multipass_min_length_ratio != nil, !minimumLengthRatioValid {
+            rejected.append("multipass_min_length_ratio: expected 0.1-2.0")
+        }
+        if patch.multipass_max_length_ratio != nil, !maximumLengthRatioValid {
+            rejected.append("multipass_max_length_ratio: expected 0.5-4.0")
+        }
+        if minimumLengthRatioValid, maximumLengthRatioValid,
+           proposedMinimumLengthRatio <= proposedMaximumLengthRatio {
+            if patch.multipass_min_length_ratio != nil {
+                settings.multipassMinimumLengthRatio = proposedMinimumLengthRatio
+                applied.append("multipass_min_length_ratio")
+            }
+            if patch.multipass_max_length_ratio != nil {
+                settings.multipassMaximumLengthRatio = proposedMaximumLengthRatio
+                applied.append("multipass_max_length_ratio")
+            }
+        } else if minimumLengthRatioValid, maximumLengthRatioValid,
+                  patch.multipass_min_length_ratio != nil
+                    || patch.multipass_max_length_ratio != nil {
+            rejected.append("multipass length ratios: minimum must not exceed maximum")
+        }
+        if let value = patch.missing_page_number_min_pages {
+            applyInteger(value, key: "missing_page_number_min_pages", range: 2...10_000, applied: &applied, rejected: &rejected) {
+                settings.missingPageNumberMinimumPages = $0
+            }
+        }
+        if let value = patch.broken_table_min_lines {
+            applyInteger(value, key: "broken_table_min_lines", range: 1...100, applied: &applied, rejected: &rejected) {
+                settings.brokenTableMinimumLines = $0
+            }
+        }
+        if let value = patch.pdf_dpi {
+            applyInteger(value, key: "pdf_dpi", range: 72...300, applied: &applied, rejected: &rejected) {
+                settings.pdfDPI = $0
+            }
+        }
+        if let value = patch.pdf_max_pages {
+            applyInteger(value, key: "pdf_max_pages", range: 1...200, applied: &applied, rejected: &rejected) {
+                settings.pdfMaximumPages = $0
+            }
+        }
+        if let value = patch.rectify_default {
+            settings.rectifyDefault = value
+            applied.append("rectify_default")
+        }
+        if let value = patch.http_port {
+            if (1024...65_535).contains(value) {
+                requiresRestart = settings.httpPort != value
+                settings.httpPort = value
+                applied.append("http_port")
+            } else {
+                rejected.append("http_port: expected 1024-65535")
+            }
+        }
+        if let value = patch.keep_alive {
+            KeepAliveService.shared.setEnabled(value)
+            applied.append("keep_alive")
         }
         if let value = patch.debug_verbose {
             settings.debugVerbose = value
             applied.append("debug_verbose")
         }
+        if let value = patch.admin_token {
+            if value.count <= 512 {
+                settings.adminToken = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                applied.append("admin_token")
+            } else {
+                rejected.append("admin_token: maximum length is 512")
+            }
+        }
 
-        guard !applied.isEmpty else { throw AdminSettingsError.emptyPatch }
-        return AdminApplyResponse(applied: applied, restarted: requiresRestart)
+        if applied.isEmpty, rejected.isEmpty {
+            rejected.append("No supported setting was provided")
+        }
+        return AdminApplyResponse(
+            applied: applied,
+            rejected: rejected,
+            restarted: requiresRestart
+        )
+    }
+
+    @MainActor
+    private static func applyServices(_ patch: AdminServicesPatch) -> AdminServicesResponse {
+        let values: [(ComputeServiceName, Bool?)] = [
+            (.ocr, patch.ocr), (.dococr, patch.dococr), (.translate, patch.translate),
+            (.transcribe, patch.transcribe), (.synthesize, patch.synthesize),
+            (.llm, patch.llm), (.ner, patch.ner), (.embed, patch.embed),
+            (.coreml, patch.coreml), (.barcode, patch.barcode),
+        ]
+        var applied: [String] = []
+        for (service, value) in values where value != nil {
+            Settings.shared.setService(service, enabled: value ?? true)
+            applied.append(service.rawValue)
+        }
+        return AdminServicesResponse(
+            services: Settings.shared.serviceStates(),
+            applied: applied
+        )
+    }
+
+    private static func adminSettingSchema() -> [AdminSettingDescriptor] {
+        func item(
+            _ key: String,
+            _ type: String,
+            _ minimum: Double? = nil,
+            _ maximum: Double? = nil,
+            _ options: [String]? = nil,
+            restart: Bool = false,
+            secret: Bool = false
+        ) -> AdminSettingDescriptor {
+            AdminSettingDescriptor(
+                key: key,
+                type: type,
+                minimum: minimum,
+                maximum: maximum,
+                options: options,
+                requires_restart: restart,
+                secret: secret
+            )
+        }
+        let groups = CorrectorGroup.allCases.map(\.rawValue).sorted()
+        return [
+            item("recognition_level", "enum", options: ["accurate", "fast"]),
+            item("recognition_languages", "string_array", 1, 8),
+            item("uses_language_correction", "bool"),
+            item("automatically_detects_language", "bool"),
+            item("minimum_text_height", "double", 0, 1),
+            item("vision_revision", "int", 0, 3, ["0", "3"]),
+            item("improve", "bool"),
+            item("corrector_groups", "string_array", 0, Double(groups.count), groups),
+            item("active_pack", "string", 1, 64),
+            item("ambiguous_skip", "bool"),
+            item("confidence_threshold", "double", 0, 1),
+            item("multipass", "bool"),
+            item("roi_upscale", "double", 1, 4),
+            item("max_roi_count", "int", 0, 20),
+            item("page_score_pass2_threshold", "double", 0, 1),
+            item("legal_id_regex", "string", 1, 2_000),
+            item("possible_legal_id_regex", "string", 1, 2_000),
+            item("candidate_gap_threshold", "double", 0, 1),
+            item("candidate_gap_confidence_threshold", "double", 0, 1),
+            item("candidate_gap_normalizer", "double", 0.001, 1),
+            item("line_confidence_weight", "double", 0, 1),
+            item("missing_page_number_min_pages", "int", 2, 10_000),
+            item("broken_table_min_lines", "int", 1, 100),
+            item("low_confidence_penalty", "double", 0, 1),
+            item("invalid_legal_id_penalty", "double", 0, 1),
+            item("missing_page_number_penalty", "double", 0, 1),
+            item("broken_table_penalty", "double", 0, 1),
+            item("multipass_min_confidence_gain", "double", 0, 1),
+            item("multipass_legal_id_tolerance", "double", 0, 1),
+            item("multipass_min_length_ratio", "double", 0.1, 2),
+            item("multipass_max_length_ratio", "double", 0.5, 4),
+            item("pdf_dpi", "int", 72, 300),
+            item("pdf_max_pages", "int", 1, 200),
+            item("rectify_default", "bool"),
+            item("http_port", "int", 1024, 65_535, restart: true),
+            item("keep_alive", "bool"),
+            item("watchdog_interval_s", "double", 10, 3600),
+            item("debug_verbose", "bool"),
+            item("admin_token", "string", 0, 512, secret: true),
+        ]
+    }
+
+    private static func applyDouble(
+        _ value: Double,
+        key: String,
+        range: ClosedRange<Double>,
+        applied: inout [String],
+        rejected: inout [String],
+        setter: (Double) -> Void
+    ) {
+        guard value.isFinite, range.contains(value) else {
+            rejected.append("\(key): expected \(range.lowerBound)-\(range.upperBound)")
+            return
+        }
+        setter(value)
+        applied.append(key)
+    }
+
+    private static func applyInteger(
+        _ value: Int,
+        key: String,
+        range: ClosedRange<Int>,
+        applied: inout [String],
+        rejected: inout [String],
+        setter: (Int) -> Void
+    ) {
+        guard range.contains(value) else {
+            rejected.append("\(key): expected \(range.lowerBound)-\(range.upperBound)")
+            return
+        }
+        setter(value)
+        applied.append(key)
+    }
+
+    private static func applyRegex(
+        _ value: String,
+        key: String,
+        applied: inout [String],
+        rejected: inout [String],
+        setter: (String) -> Void
+    ) {
+        guard !value.isEmpty, value.count <= 2_000,
+              (try? NSRegularExpression(pattern: value)) != nil else {
+            rejected.append("\(key): invalid regular expression")
+            return
+        }
+        setter(value)
+        applied.append(key)
+    }
+
+    private static func validateWords(_ words: [String]) throws {
+        guard words.count <= 50_000,
+              words.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.count <= 200 }) else {
+            throw Abort(.badRequest, reason: "words must contain at most 50000 non-empty items of 200 characters")
+        }
+    }
+
+    private static func validateOverrides(_ overrides: [String: String]) throws {
+        guard overrides.count <= 50_000,
+              overrides.allSatisfy({
+                !$0.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && $0.key.count <= 500
+                    && $0.value.count <= 500
+              }) else {
+            throw Abort(.badRequest, reason: "overrides must contain at most 50000 non-empty pairs of 500 characters")
+        }
+    }
+
+    private static func validatePackID(_ id: String) throws {
+        guard id.range(of: "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$", options: .regularExpression) != nil,
+              !["auto", "none", "off"].contains(id.lowercased()) else {
+            throw Abort(.badRequest, reason: "id must be 1-64 safe characters and not auto/none/off")
+        }
     }
 
     private static func scheduleServerRestart(reason: String) {
@@ -2132,6 +2642,63 @@ actor VaporServer {
                 userInfo: ["reason": reason, "automatic": false]
             )
         }
+    }
+
+    private static func adminHTMLV3(port: Int) -> String {
+        """
+        <!doctype html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>Compute Control Plane</title>
+          <style>
+            :root{color-scheme:dark;--bg:#061014;--panel:#0c1b20;--line:#244149;--ink:#eaf7f4;--muted:#88a6a3;--accent:#25d7be;--warn:#ffb45e;--bad:#ff776f}
+            *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0,#16424a 0,transparent 32%),linear-gradient(145deg,#061014,#09171b 65%);color:var(--ink);font:14px ui-monospace,SFMono-Regular,Menlo,monospace}
+            main{width:min(1280px,calc(100% - 24px));margin:24px auto 70px}h1{font-size:clamp(27px,5vw,48px);letter-spacing:-2px;margin:0}h2{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin:0 0 13px}.sub{color:var(--muted);margin:6px 0 20px}
+            .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:13px}.wide{grid-column:1/-1}section{background:linear-gradient(145deg,#10242a,#09161a);border:1px solid var(--line);border-radius:15px;padding:16px;box-shadow:0 18px 55px #0006}
+            .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px 13px}label{display:grid;gap:5px;color:var(--muted)}input,select,textarea,button{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:#061216;color:var(--ink);font:inherit}textarea{min-height:110px;resize:vertical}.check{display:flex;align-items:center;gap:8px}.check input{width:auto}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.actions button{width:auto;min-width:150px;background:#12343a;font-weight:800;cursor:pointer}.danger{background:#4a2020!important;color:#ffd6d2}.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:5px 9px;color:var(--muted)}pre{white-space:pre-wrap;overflow:auto;max-height:420px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#bdd2cf}.message{min-height:20px;color:var(--warn);margin:10px 0}.service{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ffffff10;padding:7px 0}.service input{width:auto}@media(max-width:620px){main{width:min(100% - 14px,1280px);margin-top:12px}.fields{grid-template-columns:1fr}.actions button{width:100%}}
+          </style>
+        </head>
+        <body><main>
+          <h1>COMPUTE / CONTROL PLANE</h1>
+          <p class="sub">Port \(port) · persistent defaults + per-request overrides + hot resources</p>
+          <section>
+            <h2>Access</h2>
+            <div class="fields"><label>X-Admin-Token<input id="token" type="password" autocomplete="off"></label></div>
+            <div class="actions"><button id="remember">Remember token</button><button id="refresh">Refresh all</button><button id="restart" class="danger">Restart server</button></div>
+            <div id="message" class="message"></div>
+          </section>
+          <div class="grid">
+            <section><h2>Health</h2><span id="healthPill" class="pill">loading</span><pre id="health"></pre></section>
+            <section><h2>Services</h2><div id="services"></div><div class="actions"><button id="saveServices">Apply services</button></div></section>
+            <section class="wide"><h2>All persistent settings</h2><div id="settings" class="fields"></div><div class="actions"><button id="saveSettings">Apply settings</button></div></section>
+            <section><h2>Vision customWords</h2><textarea id="customWords" placeholder="one word or phrase per line"></textarea><div class="actions"><button data-mode="replace" class="saveWords">Replace</button><button data-mode="append" class="saveWords">Append</button></div></section>
+            <section><h2>Post-corrector overrides</h2><textarea id="corrections" placeholder='{"bad":"good"}'></textarea><div class="actions"><button id="saveCorrections">Merge overrides</button></div></section>
+            <section><h2>Custom domain pack</h2><textarea id="pack" placeholder='{"id":"my-pack","words":[],"overrides":{}}'></textarea><div class="actions"><button id="savePack">Save pack</button><button id="resetLexicon" class="danger">Reset custom lexicon</button></div><pre id="packs"></pre></section>
+            <section class="wide"><h2>Request log · 5s refresh</h2><pre id="logs">loading</pre></section>
+          </div>
+        </main>
+        <script>
+          const $=id=>document.getElementById(id); let settingsSnapshot=null;
+          $('token').value=localStorage.getItem('computeAdminToken')||'';
+          const headers=()=>{const h={'Content-Type':'application/json'};if($('token').value)h['X-Admin-Token']=$('token').value;return h};
+          async function api(path,options={}){const r=await fetch(path,{...options,headers:{...headers(),...(options.headers||{})}});const text=await r.text();let data={};try{data=JSON.parse(text)}catch{data={message:text}}if(!r.ok)throw new Error(data.reason||data.message||r.statusText);return data}
+          const msg=value=>$('message').textContent=value;
+          function control(d,value){const id='setting_'+d.key;let input;if(d.type==='bool'){input=document.createElement('input');input.type='checkbox';input.checked=!!value}else if(d.options&&d.type!=='string_array'){input=document.createElement('select');d.options.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;input.appendChild(o)});input.value=String(value)}else if(d.type==='string_array'){input=document.createElement('input');input.value=(value||[]).join(',')}else if(d.type==='int'||d.type==='double'){input=document.createElement('input');input.type='number';input.step=d.type==='int'?'1':'any';if(d.minimum!==null)input.min=d.minimum;if(d.maximum!==null)input.max=d.maximum;input.value=value}else{input=document.createElement(d.key.includes('regex')?'textarea':'input');input.value=value??'';if(d.secret)input.type='password'}input.id=id;input.dataset.type=d.type;const label=document.createElement('label');label.textContent=d.key+(d.requires_restart?' · restart':'');label.appendChild(input);return label}
+          function renderSettings(data){settingsSnapshot=data;const root=$('settings');root.replaceChildren();data.schema.forEach(d=>root.appendChild(control(d,data[d.key])))}
+          function settingPayload(){const out={};settingsSnapshot.schema.forEach(d=>{const el=$('setting_'+d.key);if(d.type==='bool')out[d.key]=el.checked;else if(d.type==='int')out[d.key]=Number.parseInt(el.value,10);else if(d.type==='double')out[d.key]=Number(el.value);else if(d.type==='string_array')out[d.key]=el.value.split(',').map(x=>x.trim()).filter(Boolean);else out[d.key]=el.value});return out}
+          function renderServices(data){const root=$('services');root.replaceChildren();Object.entries(data.services).forEach(([name,on])=>{const row=document.createElement('label');row.className='service';row.textContent=name;const toggle=document.createElement('input');toggle.type='checkbox';toggle.checked=on;toggle.dataset.service=name;row.appendChild(toggle);root.appendChild(row)})}
+          async function refresh(){try{const [health,settings,services,words,corrections,packs,log]=await Promise.all([api('/health'),api('/admin/settings'),api('/admin/services'),api('/admin/customwords'),api('/admin/corrections'),api('/admin/packs'),api('/admin/log')]);$('healthPill').textContent=health.status.toUpperCase()+' · '+health.uptime_s+'s';$('health').textContent=JSON.stringify(health,null,2);renderSettings(settings);renderServices(services);$('customWords').value=words.words.join('\n');$('corrections').value=JSON.stringify(corrections.overrides,null,2);$('packs').textContent=JSON.stringify(packs,null,2);$('logs').textContent=log.logs.slice().reverse().map(x=>`${x.timestamp} ${x.method.padEnd(8)} ${String(x.status).padStart(3)} ${x.duration_ms.toFixed(1).padStart(8)}ms ${x.size}B ${x.path}`).join('\n');msg('')}catch(e){msg(e.message)}}
+          $('remember').onclick=()=>{localStorage.setItem('computeAdminToken',$('token').value);msg('Token saved locally')};$('refresh').onclick=refresh;$('restart').onclick=async()=>{try{await api('/admin/restart',{method:'POST',body:'{}'});msg('Restart requested')}catch(e){msg(e.message)}};
+          $('saveSettings').onclick=async()=>{try{const payload=settingPayload();const result=await api('/admin/settings',{method:'POST',body:JSON.stringify(payload)});if(payload.admin_token!==undefined){$('token').value=payload.admin_token;localStorage.setItem('computeAdminToken',payload.admin_token)}if(result.restarted){msg('Settings applied; server restart requested. Reconnect on port '+payload.http_port+'.')}else{await refresh();msg(JSON.stringify(result))}}catch(e){msg(e.message)}};
+          $('saveServices').onclick=async()=>{try{const payload={};document.querySelectorAll('[data-service]').forEach(x=>payload[x.dataset.service]=x.checked);msg(JSON.stringify(await api('/admin/services',{method:'POST',body:JSON.stringify(payload)})))}catch(e){msg(e.message)}};
+          document.querySelectorAll('.saveWords').forEach(button=>button.onclick=async()=>{try{const words=$('customWords').value.split('\n').map(x=>x.trim()).filter(Boolean);await api('/admin/customwords?mode='+button.dataset.mode,{method:'POST',body:JSON.stringify({words})});await refresh()}catch(e){msg(e.message)}});
+          $('saveCorrections').onclick=async()=>{try{await api('/admin/corrections',{method:'POST',body:JSON.stringify({overrides:JSON.parse($('corrections').value||'{}')})});await refresh()}catch(e){msg(e.message)}};
+          $('savePack').onclick=async()=>{try{await api('/admin/pack',{method:'POST',body:JSON.stringify(JSON.parse($('pack').value))});await refresh()}catch(e){msg(e.message)}};$('resetLexicon').onclick=async()=>{try{await api('/admin/lexicon/reset',{method:'POST',body:'{}'});await refresh()}catch(e){msg(e.message)}};
+          refresh();setInterval(async()=>{try{const log=await api('/admin/log');$('logs').textContent=log.logs.slice().reverse().map(x=>`${x.timestamp} ${x.method.padEnd(8)} ${String(x.status).padStart(3)} ${x.duration_ms.toFixed(1).padStart(8)}ms ${x.size}B ${x.path}`).join('\n')}catch{}},5000);
+        </script></body></html>
+        """
     }
 
     private static func adminHTML(port: Int) -> String {
@@ -2241,24 +2808,101 @@ actor VaporServer {
                 "'max_pages' must be between 1 and 200"
             )
         }
-        if let rectify = options.rectify, rectify != 0, rectify != 1 {
-            throw ImageProcessingError.invalidPDFOptions("'rectify' must be 0 or 1")
+        for (name, value) in [
+            ("rectify", options.rectify),
+            ("improve", options.improve),
+            ("raw", options.raw),
+            ("multipass", options.multipass),
+        ] where value != nil && booleanValue(value) == nil {
+            throw ImageProcessingError.invalidPDFOptions("'\(name)' must be 0/1 or true/false")
         }
-        if let improve = options.improve, improve != 0, improve != 1 {
-            throw ImageProcessingError.invalidPDFOptions("'improve' must be 0 or 1")
+        if let level = options.level, !["accurate", "fast"].contains(level.lowercased()) {
+            throw ImageProcessingError.invalidPDFOptions("'level' must be accurate or fast")
         }
-        if let raw = options.raw, raw != 0, raw != 1 {
-            throw ImageProcessingError.invalidPDFOptions("'raw' must be 0 or 1")
+        if let conf = options.conf, !conf.isFinite || !(0...1).contains(conf) {
+            throw ImageProcessingError.invalidPDFOptions("'conf' must be between 0 and 1")
+        }
+        if let upscale = options.upscale, !upscale.isFinite || !(1...4).contains(upscale) {
+            throw ImageProcessingError.invalidPDFOptions("'upscale' must be between 1 and 4")
+        }
+        if let groups = options.groups {
+            let values = groups.split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            guard values.allSatisfy({ CorrectorGroup(rawValue: $0) != nil }) else {
+                throw ImageProcessingError.invalidPDFOptions("'groups' contains an unknown corrector group")
+            }
+        }
+        if let pack = options.pack {
+            let normalized = pack.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard normalized.range(
+                of: "^[a-z0-9][a-z0-9._-]{0,63}$",
+                options: .regularExpression
+            ) != nil else {
+                throw ImageProcessingError.invalidPDFOptions("'pack' must be a safe 1-64 character ID")
+            }
         }
         return options
+    }
+
+    private static func runtimeSettings(
+        options: OCRRequestOptions,
+        base: OCRRuntimeSettingsSnapshot
+    ) throws -> OCRRuntimeSettingsSnapshot {
+        let languages = options.langs.map {
+            $0.split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        if let languages,
+           languages.isEmpty || languages.count > 8
+            || !languages.allSatisfy(Self.isValidLanguageIdentifier) {
+            throw ImageProcessingError.invalidPDFOptions(
+                "'langs' must contain 1-8 BCP-47-style identifiers"
+            )
+        }
+        let groups = options.groups.map {
+            Set($0.split(separator: ",", omittingEmptySubsequences: false).compactMap {
+                CorrectorGroup(
+                    rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            })
+        }
+        return base.applying(
+            recognitionLevel: options.level?.lowercased(),
+            recognitionLanguages: languages,
+            multipassEnabled: booleanValue(options.multipass),
+            confidenceThreshold: options.conf,
+            roiUpscale: options.upscale,
+            correctorGroups: groups,
+            activePack: options.pack?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+        )
+    }
+
+    private static func isValidLanguageIdentifier(_ value: String) -> Bool {
+        value.count <= 35
+            && value.range(
+                of: "^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{1,8})*$",
+                options: .regularExpression
+            ) != nil
+    }
+
+    private static func booleanValue(_ value: String?) -> Bool? {
+        guard let value else { return nil }
+        switch value.lowercased() {
+        case "1", "true", "yes", "on": return true
+        case "0", "false", "no", "off": return false
+        default: return nil
+        }
     }
 
     private static func improveRequested(
         options: OCRRequestOptions,
         runtime: OCRRuntimeSettingsSnapshot
     ) -> Bool {
-        if options.raw == 1 { return false }
-        if let improve = options.improve { return improve == 1 }
+        if booleanValue(options.raw) == true { return false }
+        if let improve = booleanValue(options.improve) { return improve }
         return runtime.improveEnabled
     }
 
@@ -2280,7 +2924,7 @@ actor VaporServer {
         result: OCRImprovementResult,
         runtime: OCRRuntimeSettingsSnapshot,
         improve: Bool,
-        recognitionLevel: RecognizeTextRequest.RecognitionLevel,
+        recognitionLevel: String,
         usesLanguageCorrection: Bool,
         automaticallyDetectsLanguage: Bool
     ) async {
@@ -2290,7 +2934,7 @@ actor VaporServer {
             result: result,
             runtime: runtime,
             improve: improve,
-            recognitionLevel: recognitionLevel == .fast ? "Fast" : "Accurate",
+            recognitionLevel: recognitionLevel,
             usesLanguageCorrection: usesLanguageCorrection,
             automaticallyDetectsLanguage: automaticallyDetectsLanguage
         )

@@ -10,7 +10,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var serverManager: VaporServerManager
     @Environment(\.dismiss) private var dismiss
-    @State var recognitionLevel = Settings.shared.recognitionLevel
+    @State var recognitionLevel = Settings.shared.recognitionLevel.capitalized
     @State var languageCorrection = Settings.shared.languageCorrection
     @State var autoDetectLanguage = Settings.shared.automaticallyDetectsLanguage
     @State var keepAliveEnabled = Settings.shared.keepAliveEnabled
@@ -59,7 +59,7 @@ struct SettingsView: View {
                                 .font(.body)
                                 .fontWeight(.medium)
                             Spacer()
-                            Text("8000 (pinned)")
+                            Text("\(Settings.shared.httpPort)")
                                 .font(.subheadline.monospacedDigit())
                                 .foregroundColor(.secondary)
                         }
@@ -116,6 +116,9 @@ struct SettingsView: View {
             }
             .onChange(of: languageCorrection) { oldValue, newValue in
                 Settings.shared.languageCorrection = newValue
+            }
+            .onChange(of: recognitionLevel) { oldValue, newValue in
+                Settings.shared.recognitionLevel = newValue
             }
             .onChange(of: autoDetectLanguage) { oldValue, newValue in
                 Settings.shared.automaticallyDetectsLanguage = newValue

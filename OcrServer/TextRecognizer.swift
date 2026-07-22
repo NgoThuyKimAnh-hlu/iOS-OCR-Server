@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import ImageIO
 import Vision
 
 struct VisionNormalizedBox: Sendable {
@@ -75,21 +76,34 @@ struct OCRVisionOutput: Sendable {
 
 final class TextRecognizer {
     let recognitionLevel: RecognizeTextRequest.RecognitionLevel
+    let recognitionLanguages: [String]
     let usesLanguageCorrection: Bool
     let automaticallyDetectsLanguage: Bool
+    let minimumTextHeight: Double
+    let visionRevision: Int
 
     init(
         recognitionLevel: RecognizeTextRequest.RecognitionLevel = .accurate,
+        recognitionLanguages: [String] = ["vi-VT", "en"],
         usesLanguageCorrection: Bool = true,
-        automaticallyDetectsLanguage: Bool = true
+        automaticallyDetectsLanguage: Bool = true,
+        minimumTextHeight: Double = 0,
+        visionRevision: Int = 0
     ) {
         self.recognitionLevel = recognitionLevel
+        self.recognitionLanguages = recognitionLanguages
         self.usesLanguageCorrection = usesLanguageCorrection
         self.automaticallyDetectsLanguage = automaticallyDetectsLanguage
+        self.minimumTextHeight = minimumTextHeight
+        self.visionRevision = visionRevision
     }
 
-    func getOcrResult(data: Data) async -> OCRResult? {
-        await recognizeDetailed(data: data, customWords: [], maximumCandidates: 1)?.result
+    func getOcrResult(data: Data, customWords: [String] = []) async -> OCRResult? {
+        await recognizeDetailed(
+            data: data,
+            customWords: customWords,
+            maximumCandidates: 1
+        )?.result
     }
 
     func recognizeDetailed(
@@ -101,11 +115,14 @@ final class TextRecognizer {
             return nil
         }
 
-        var request = RecognizeTextRequest()
+        var request = RecognizeTextRequest(visionRevision == 3 ? .revision3 : nil)
         request.recognitionLevel = recognitionLevel
         request.usesLanguageCorrection = usesLanguageCorrection
         request.automaticallyDetectsLanguage = automaticallyDetectsLanguage
-        request.recognitionLanguages = [Locale.Language(identifier: "vi")]
+        request.recognitionLanguages = recognitionLanguages.map {
+            Locale.Language(identifier: $0)
+        }
+        request.minimumTextHeightFraction = Float(minimumTextHeight)
         request.customWords = customWords
 
         let started = DispatchTime.now().uptimeNanoseconds

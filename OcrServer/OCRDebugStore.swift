@@ -44,12 +44,16 @@ struct OCRDebugConfigSnapshot: Content, Sendable {
     let pack_version: String
     let pack_hash: String
     let confidence_threshold: Double
-    let recognition_language: String
+    let recognition_languages: [String]
     let recognition_level: String
     let language_correction: Bool
     let automatically_detects_language: Bool
+    let minimum_text_height: Double
+    let vision_revision: Int
     let multipass: Bool
     let roi_upscale: Double
+    let page_score_pass2_threshold: Double
+    let legal_id_regex: String
     let corrector_groups: [String]
     let active_pack: String
     let improve: Bool
@@ -156,12 +160,16 @@ enum OCRDebugTraceFactory {
                 pack_version: result.pack.version,
                 pack_hash: result.pack.hash,
                 confidence_threshold: runtime.confidenceThreshold,
-                recognition_language: "vi",
+                recognition_languages: runtime.recognitionLanguages,
                 recognition_level: recognitionLevel,
                 language_correction: usesLanguageCorrection,
                 automatically_detects_language: automaticallyDetectsLanguage,
+                minimum_text_height: runtime.minimumTextHeight,
+                vision_revision: runtime.visionRevision,
                 multipass: runtime.multipassEnabled,
                 roi_upscale: runtime.roiUpscale,
+                page_score_pass2_threshold: runtime.pageScorePass2Threshold,
+                legal_id_regex: runtime.legalIDRegex,
                 corrector_groups: runtime.correctorGroups.map(\.rawValue).sorted(),
                 active_pack: runtime.activePack,
                 improve: improve,
