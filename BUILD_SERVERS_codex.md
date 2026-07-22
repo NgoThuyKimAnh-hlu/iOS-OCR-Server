@@ -11,10 +11,14 @@
 ## CI iterations
 
 - Baseline before changes: run `29820887213`, commit `a131551`, succeeded on 2026-07-21.
-- New implementation: pending first CI build.
+- Round 1: commit `6ea9d47`, run `29895740342`, succeeded on 2026-07-22.
+- No Swift compiler fixes were required: the first implementation build passed.
+- The unsigned IPA was packaged and uploaded as artifact `OcrServer-unsigned-ipa` (`13,354,699` bytes, artifact ID `8520022147`).
 
 ## Verification status
 
 - Verified: baseline fork builds in GitHub Actions.
-- Pending: Swift compile verification for the three new services and routes.
+- Verified: the three new services and routes compile with the repository's unsigned-iPhoneOS GitHub Actions build.
+- Verified: checkout, environment inspection, Xcode build, IPA packaging, and artifact upload all completed successfully in run `29895740342`.
+- Not device-tested: HTTP responses, permission prompts, recognition accuracy, language-pack downloads, and generated CAF playback require a physical iOS device.
 - Runtime-only assumptions: language packs/voices must be installed on the device; STT requires user-granted Speech permission; Translation may show Apple's language-download UI.
