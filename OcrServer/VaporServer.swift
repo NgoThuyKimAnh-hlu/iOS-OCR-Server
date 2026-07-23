@@ -848,6 +848,8 @@ private enum FieldBatchError: LocalizedError {
 }
 
 actor VaporServer {
+    private static let wildcardBindHost = "0.0.0.0"
+
     private var app: Application?
     private var runTask: Task<Void, Never>?
     
@@ -857,7 +859,6 @@ actor VaporServer {
     // 當伺服器停止時發通知
     private var onStopped: (@Sendable () -> Void)?
 
-    let host: String = "0.0.0.0"
     let environment: Environment = .production
     
     // 可由外部設置
@@ -886,7 +887,7 @@ actor VaporServer {
         guard runTask == nil, app == nil else { return }
 
         let app = try await Application.make(environment)
-        app.http.server.configuration.hostname = host
+        app.http.server.configuration.hostname = Self.wildcardBindHost
         app.http.server.configuration.port = port
         app.http.server.configuration.reuseAddress = true
         app.middleware.use(RequestMetricsMiddleware(), at: .beginning)
