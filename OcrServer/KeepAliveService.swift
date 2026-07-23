@@ -16,7 +16,7 @@ final class KeepAliveService: ObservableObject {
 
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
-    private var silentBuffer: AVAudioPCMBuffer?
+    private var keepAliveBuffer: AVAudioPCMBuffer?
     private var isEngineConfigured = false
     private var observers: [NSObjectProtocol] = []
 
@@ -72,8 +72,8 @@ final class KeepAliveService: ObservableObject {
             if !audioEngine.isRunning {
                 try audioEngine.start()
             }
-            if !playerNode.isPlaying, let silentBuffer {
-                playerNode.scheduleBuffer(silentBuffer, at: nil, options: .loops)
+            if !playerNode.isPlaying, let keepAliveBuffer {
+                playerNode.scheduleBuffer(keepAliveBuffer, at: nil, options: .loops)
                 playerNode.play()
             }
 
@@ -114,13 +114,19 @@ final class KeepAliveService: ObservableObject {
 
         buffer.frameLength = buffer.frameCapacity
         if let channel = buffer.floatChannelData?[0] {
-            channel.initialize(repeating: 0, count: Int(buffer.frameLength))
+            let amplitude: Float = 0.0001
+            let samplesPerCycle = max(1, Int(format.sampleRate / 20))
+            for frame in 0..<Int(buffer.frameLength) {
+                let phase = Float(frame % samplesPerCycle) / Float(samplesPerCycle)
+                let triangle = 1 - (4 * abs(phase - 0.5))
+                channel[frame] = amplitude * triangle
+            }
         }
 
         audioEngine.attach(playerNode)
         audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: format)
-        playerNode.volume = 0
-        silentBuffer = buffer
+        playerNode.volume = 0.001
+        keepAliveBuffer = buffer
         isEngineConfigured = true
     }
 
@@ -149,6 +155,6 @@ private enum KeepAliveError: LocalizedError {
     case audioBufferUnavailable
 
     var errorDescription: String? {
-        "Unable to create the silent keep-alive audio buffer"
+        "Unable to create the keep-alive audio buffer"
     }
 }
