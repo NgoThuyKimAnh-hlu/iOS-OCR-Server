@@ -39,7 +39,9 @@ class DocRecognizer {
             request.textRecognitionOptions.automaticallyDetectLanguage = automaticallyDetectsLanguage
             request.textRecognitionOptions.useLanguageCorrection = usesLanguageCorrection
             request.textRecognitionOptions.minimumTextHeightFraction = Float(minimumTextHeight)
-            request.textRecognitionOptions.customWords = customWords
+            if !customWords.isEmpty {
+                request.textRecognitionOptions.customWords = customWords
+            }
             request.textRecognitionOptions.maximumCandidateCount = 1
 
             let observations = try? await request.perform(on: imageData)

@@ -43,6 +43,7 @@ struct OCRDebugConfigSnapshot: Content, Sendable {
     let pack_id: String
     let pack_version: String
     let pack_hash: String
+    let customwords_count: Int
     let confidence_threshold: Double
     let recognition_languages: [String]
     let recognition_level: String
@@ -159,6 +160,7 @@ enum OCRDebugTraceFactory {
                 pack_id: result.pack.id,
                 pack_version: result.pack.version,
                 pack_hash: result.pack.hash,
+                customwords_count: result.pack.words.count,
                 confidence_threshold: runtime.confidenceThreshold,
                 recognition_languages: runtime.recognitionLanguages,
                 recognition_level: recognitionLevel,

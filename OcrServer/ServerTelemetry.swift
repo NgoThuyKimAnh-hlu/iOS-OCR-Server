@@ -53,6 +53,7 @@ struct OCRImproveHealthStatus: Content, Sendable {
     let active_pack: String
     let customization_version: Int
     let customization_hash: String
+    let customwords_count: Int
     let custom_words: Int
     let custom_overrides: Int
     let custom_packs: Int
@@ -161,7 +162,8 @@ final class ServerTelemetry: ObservableObject {
     func healthResponse(
         port: Int,
         keepAlive: Bool,
-        customization: OCRCustomizationSummary
+        customization: OCRCustomizationSummary,
+        customWordsCount: Int
     ) -> ServerHealthResponse {
         let device = UIDevice.current
         let level = device.batteryLevel >= 0
@@ -196,6 +198,7 @@ final class ServerTelemetry: ObservableObject {
                 active_pack: Settings.shared.activePack,
                 customization_version: customization.version,
                 customization_hash: customization.hash,
+                customwords_count: customWordsCount,
                 custom_words: customization.custom_words,
                 custom_overrides: customization.custom_overrides,
                 custom_packs: customization.custom_packs
@@ -206,12 +209,14 @@ final class ServerTelemetry: ObservableObject {
     func statsResponse(
         port: Int,
         keepAlive: Bool,
-        customization: OCRCustomizationSummary
+        customization: OCRCustomizationSummary,
+        customWordsCount: Int
     ) -> ServerStatsResponse {
         let health = healthResponse(
             port: port,
             keepAlive: keepAlive,
-            customization: customization
+            customization: customization,
+            customWordsCount: customWordsCount
         )
         return ServerStatsResponse(
             status: health.status,

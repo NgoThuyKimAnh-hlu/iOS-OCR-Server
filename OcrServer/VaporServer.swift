@@ -656,11 +656,13 @@ actor VaporServer {
             guard let self else { throw Abort(.internalServerError) }
             let port = await self.port
             let customization = try await OCRCustomizationStore.shared.summary()
+            let customWordsCount = try await Self.appliedCustomWordsCount()
             let health = await MainActor.run {
                 ServerTelemetry.shared.healthResponse(
                     port: port,
                     keepAlive: KeepAliveService.shared.isActive,
-                    customization: customization
+                    customization: customization,
+                    customWordsCount: customWordsCount
                 )
             }
             return try Self.jsonResponse(.ok, health)
@@ -670,11 +672,13 @@ actor VaporServer {
             guard let self else { throw Abort(.internalServerError) }
             let port = await self.port
             let customization = try await OCRCustomizationStore.shared.summary()
+            let customWordsCount = try await Self.appliedCustomWordsCount()
             let stats = await MainActor.run {
                 ServerTelemetry.shared.statsResponse(
                     port: port,
                     keepAlive: KeepAliveService.shared.isActive,
-                    customization: customization
+                    customization: customization,
+                    customWordsCount: customWordsCount
                 )
             }
             return try Self.jsonResponse(.ok, stats)
@@ -2198,6 +2202,19 @@ actor VaporServer {
         guard enabled else {
             throw Abort(.serviceUnavailable, reason: "\(service.rawValue) disabled")
         }
+    }
+
+    private static func appliedCustomWordsCount() async throws -> Int {
+        let activePack = await MainActor.run { Settings.shared.activePack }
+        let pack = try await OCRImprovementService.shared.resolvePack(
+            metadata: OCRDomainMetadata(
+                documentType: nil,
+                agency: nil,
+                year: nil,
+                requestedPack: activePack
+            )
+        )
+        return pack.words.count
     }
 
     @MainActor

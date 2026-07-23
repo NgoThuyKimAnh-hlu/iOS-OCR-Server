@@ -123,7 +123,9 @@ final class TextRecognizer {
             Locale.Language(identifier: $0)
         }
         request.minimumTextHeightFraction = Float(minimumTextHeight)
-        request.customWords = customWords
+        if !customWords.isEmpty {
+            request.customWords = customWords
+        }
 
         let started = DispatchTime.now().uptimeNanoseconds
         let observations = (try? await request.perform(on: data)) ?? []
