@@ -59,6 +59,7 @@ struct DocOCRResult: Content {
     let pack_hash: String
     let build_version: String
     let schema_version: Int
+    let dpi_used: Int?
     let thermal_throttling: Bool
     let thermal: String
 
@@ -67,7 +68,8 @@ struct DocOCRResult: Content {
         message: String,
         ocr_text: String,
         rectified: Bool? = nil,
-        improvement: OCRImprovementResult? = nil
+        improvement: OCRImprovementResult? = nil,
+        dpi_used: Int? = nil
     ) {
         self.success = success
         self.message = message
@@ -87,6 +89,7 @@ struct DocOCRResult: Content {
         self.pack_hash = improvement?.pack.hash ?? ""
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        self.dpi_used = dpi_used
         let thermalStatus = ThermalStatus.current()
         self.thermal_throttling = thermalStatus.thermalThrottling
         self.thermal = thermalStatus.thermal
@@ -115,6 +118,7 @@ struct UploadResponse: Content {
     let pack_hash: String
     let build_version: String
     let schema_version: Int
+    let dpi_used: Int?
     let thermal_throttling: Bool
     let thermal: String
 
@@ -126,7 +130,8 @@ struct UploadResponse: Content {
         image_height: Int,
         ocr_boxes: [OCRBoxItem],
         rectified: Bool? = nil,
-        improvement: OCRImprovementResult? = nil
+        improvement: OCRImprovementResult? = nil,
+        dpi_used: Int? = nil
     ) {
         self.success = success
         self.message = message
@@ -149,6 +154,7 @@ struct UploadResponse: Content {
         self.pack_hash = improvement?.pack.hash ?? ""
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        self.dpi_used = dpi_used
         let thermalStatus = ThermalStatus.current()
         self.thermal_throttling = thermalStatus.thermalThrottling
         self.thermal = thermalStatus.thermal
@@ -178,6 +184,7 @@ struct PDFUploadPageResponse: Content {
     let pack_hash: String
     let build_version: String
     let schema_version: Int
+    let dpi_used: Int
     let thermal_throttling: Bool
     let thermal: String
 
@@ -186,7 +193,8 @@ struct PDFUploadPageResponse: Content {
         success: Bool,
         message: String,
         improvement: OCRImprovementResult?,
-        rectified: Bool?
+        rectified: Bool?,
+        dpi_used: Int
     ) {
         self.page = page
         self.success = success
@@ -210,6 +218,7 @@ struct PDFUploadPageResponse: Content {
         self.pack_hash = improvement?.pack.hash ?? ""
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        self.dpi_used = dpi_used
         let thermalStatus = ThermalStatus.current()
         self.thermal_throttling = thermalStatus.thermalThrottling
         self.thermal = thermalStatus.thermal
@@ -231,6 +240,7 @@ struct PDFUploadResponse: Content {
     let corrections_applied: Int
     let build_version: String
     let schema_version: Int
+    let dpi_used: Int
     let thermal_throttling: Bool
     let thermal: String
 
@@ -249,6 +259,7 @@ struct PDFUploadResponse: Content {
         self.corrections_applied = pages.reduce(0) { $0 + $1.corrections_applied }
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        self.dpi_used = pages.first?.dpi_used ?? 0
         let thermalStatus = ThermalStatus.current()
         self.thermal_throttling = thermalStatus.thermalThrottling
         self.thermal = thermalStatus.thermal
@@ -279,6 +290,7 @@ struct PDFDocOCRPageResponse: Content {
     let pack_hash: String
     let build_version: String
     let schema_version: Int
+    let dpi_used: Int
     let thermal_throttling: Bool
     let thermal: String
 
@@ -287,7 +299,8 @@ struct PDFDocOCRPageResponse: Content {
         success: Bool,
         message: String,
         improvement: OCRImprovementResult?,
-        rectified: Bool?
+        rectified: Bool?,
+        dpi_used: Int
     ) {
         self.page = page
         self.success = success
@@ -308,6 +321,7 @@ struct PDFDocOCRPageResponse: Content {
         self.pack_hash = improvement?.pack.hash ?? ""
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        self.dpi_used = dpi_used
         let thermalStatus = ThermalStatus.current()
         self.thermal_throttling = thermalStatus.thermalThrottling
         self.thermal = thermalStatus.thermal
@@ -329,6 +343,7 @@ struct PDFDocOCRResponse: Content {
     let corrections_applied: Int
     let build_version: String
     let schema_version: Int
+    let dpi_used: Int
     let thermal_throttling: Bool
     let thermal: String
 
@@ -347,6 +362,7 @@ struct PDFDocOCRResponse: Content {
         self.corrections_applied = pages.reduce(0) { $0 + $1.corrections_applied }
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        self.dpi_used = pages.first?.dpi_used ?? 0
         let thermalStatus = ThermalStatus.current()
         self.thermal_throttling = thermalStatus.thermalThrottling
         self.thermal = thermalStatus.thermal
@@ -408,6 +424,7 @@ struct FieldBatchResult: Content, Sendable {
     let corrections_applied: Int
     let build_version: String
     let schema_version: Int
+    let dpi_used: Int?
     let thermal_throttling: Bool
     let thermal: String
 
@@ -417,7 +434,8 @@ struct FieldBatchResult: Content, Sendable {
         total: Int,
         format: String,
         results: [OCRImprovementResult],
-        pageSeparator: String
+        pageSeparator: String,
+        dpi_used: Int? = nil
     ) {
         self.filename = filename
         self.success = !results.isEmpty
@@ -436,6 +454,7 @@ struct FieldBatchResult: Content, Sendable {
         self.corrections_applied = results.reduce(0) { $0 + $1.correctionsApplied }
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        self.dpi_used = dpi_used
         let thermalStatus = ThermalStatus.current()
         self.thermal_throttling = thermalStatus.thermalThrottling
         self.thermal = thermalStatus.thermal
@@ -446,7 +465,8 @@ struct FieldBatchResult: Content, Sendable {
         completed: Int,
         total: Int,
         format: String,
-        error: Error
+        error: Error,
+        dpi_used: Int? = nil
     ) {
         self.filename = filename
         self.success = false
@@ -465,6 +485,7 @@ struct FieldBatchResult: Content, Sendable {
         self.corrections_applied = 0
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        self.dpi_used = dpi_used
         let thermalStatus = ThermalStatus.current()
         self.thermal_throttling = thermalStatus.thermalThrottling
         self.thermal = thermalStatus.thermal
@@ -621,6 +642,7 @@ struct AdminSettingsResponse: Content, Sendable {
     let multipass_min_length_ratio: Double
     let multipass_max_length_ratio: Double
     let pdf_dpi: Int
+    let hot_dpi: Int
     let pdf_max_pages: Int
     let rectify_default: Bool
     let http_port: Int
@@ -669,6 +691,7 @@ struct AdminSettingsPatch: Content, Sendable {
     let multipass_min_length_ratio: Double?
     let multipass_max_length_ratio: Double?
     let pdf_dpi: Int?
+    let hot_dpi: Int?
     let pdf_max_pages: Int?
     let rectify_default: Bool?
     let http_port: Int?
@@ -1402,7 +1425,7 @@ actor VaporServer {
                 for sequential OCR, Markdown, and client-side Word batches.</p>
                 <h3>OCR a PDF or rectify a photographed scan:</h3>
                 <pre><code>curl -H "Accept: application/json" \\
-              -X POST 'http://&lt;YOUR IP&gt;:\(port)/upload?dpi=200&amp;max_pages=50&amp;rectify=1' \\
+              -X POST 'http://&lt;YOUR IP&gt;:\(port)/upload?dpi=150&amp;max_pages=50&amp;rectify=1' \\
               -F "file=@document.pdf"</code></pre>
                 <p><code>/docOCR</code> accepts the same PDF and rectify query parameters on iOS 26.</p>
                 <p>Auto-improve is on by default. Use <code>?raw=1</code> or
@@ -1532,10 +1555,14 @@ actor VaporServer {
             )
 
             if Self.isPDF(data) {
+                let dpiUsed = Self.effectivePDFDPI(
+                    requested: options.dpi,
+                    runtime: runtime
+                )
                 do {
                     let rendered = try await ImageProcessingService.shared.renderPDF(
                         data: data,
-                        dpi: options.dpi ?? runtime.pdfDPI,
+                        dpi: dpiUsed,
                         maximumPages: options.max_pages ?? runtime.pdfMaximumPages
                     )
                     var pages: [PDFUploadPageResponse] = []
@@ -1575,7 +1602,8 @@ actor VaporServer {
                                 success: result != nil,
                                 message: result == nil ? "OCR failed" : "OCR completed successfully",
                                 improvement: result,
-                                rectified: rectify ? processed.rectified : nil
+                                rectified: rectify ? processed.rectified : nil,
+                                dpi_used: dpiUsed
                             )
                         )
                     }
@@ -1598,7 +1626,8 @@ actor VaporServer {
                             ocr_result: "",
                             image_width: 0,
                             image_height: 0,
-                            ocr_boxes: []
+                            ocr_boxes: [],
+                            dpi_used: dpiUsed
                         )
                     )
                 }
@@ -2372,10 +2401,14 @@ actor VaporServer {
                 )
 
                 if Self.isPDF(data) {
+                    let dpiUsed = Self.effectivePDFDPI(
+                        requested: options.dpi,
+                        runtime: runtime
+                    )
                     do {
                         let rendered = try await ImageProcessingService.shared.renderPDF(
                             data: data,
-                            dpi: options.dpi ?? runtime.pdfDPI,
+                            dpi: dpiUsed,
                             maximumPages: options.max_pages ?? runtime.pdfMaximumPages
                         )
                         var pages: [PDFDocOCRPageResponse] = []
@@ -2425,7 +2458,8 @@ actor VaporServer {
                                     success: result != nil,
                                     message: result == nil ? "OCR failed" : "OCR completed successfully",
                                     improvement: result,
-                                    rectified: rectify ? processed.rectified : nil
+                                    rectified: rectify ? processed.rectified : nil,
+                                    dpi_used: dpiUsed
                                 )
                             )
                         }
@@ -2445,7 +2479,8 @@ actor VaporServer {
                             DocOCRResult(
                                 success: false,
                                 message: error.localizedDescription,
-                                ocr_text: ""
+                                ocr_text: "",
+                                dpi_used: dpiUsed
                             )
                         )
                     }
@@ -2628,6 +2663,9 @@ actor VaporServer {
         var responses: [FieldBatchResult] = []
         responses.reserveCapacity(files.count)
         for (index, file) in files.enumerated() {
+            let dpiUsed = isPDF(file.data)
+                ? effectivePDFDPI(requested: options.dpi, runtime: runtime)
+                : nil
             do {
                 let results = try await processFieldBatchFile(
                     file,
@@ -2637,7 +2675,7 @@ actor VaporServer {
                     pack: pack,
                     improve: improve,
                     rectify: rectify,
-                    dpi: options.dpi ?? runtime.pdfDPI,
+                    dpi: dpiUsed ?? runtime.pdfDPI,
                     maximumPages: options.max_pages ?? runtime.pdfMaximumPages
                 )
                 responses.append(
@@ -2647,7 +2685,8 @@ actor VaporServer {
                         total: files.count,
                         format: mode.responseFormat,
                         results: results,
-                        pageSeparator: mode.pageSeparator
+                        pageSeparator: mode.pageSeparator,
+                        dpi_used: dpiUsed
                     )
                 )
             } catch {
@@ -2657,7 +2696,8 @@ actor VaporServer {
                         completed: index + 1,
                         total: files.count,
                         format: mode.responseFormat,
-                        error: error
+                        error: error,
+                        dpi_used: dpiUsed
                     )
                 )
             }
@@ -2800,6 +2840,7 @@ actor VaporServer {
             multipass_min_length_ratio: settings.multipassMinimumLengthRatio,
             multipass_max_length_ratio: settings.multipassMaximumLengthRatio,
             pdf_dpi: settings.pdfDPI,
+            hot_dpi: settings.hotDPI,
             pdf_max_pages: settings.pdfMaximumPages,
             rectify_default: settings.rectifyDefault,
             http_port: settings.httpPort,
@@ -2997,6 +3038,11 @@ actor VaporServer {
                 settings.pdfDPI = $0
             }
         }
+        if let value = patch.hot_dpi {
+            applyInteger(value, key: "hot_dpi", range: 72...300, applied: &applied, rejected: &rejected) {
+                settings.hotDPI = $0
+            }
+        }
         if let value = patch.pdf_max_pages {
             applyInteger(value, key: "pdf_max_pages", range: 1...200, applied: &applied, rejected: &rejected) {
                 settings.pdfMaximumPages = $0
@@ -3136,6 +3182,7 @@ actor VaporServer {
             item("multipass_min_length_ratio", "double", 0.1, 2),
             item("multipass_max_length_ratio", "double", 0.5, 4),
             item("pdf_dpi", "int", 72, 300),
+            item("hot_dpi", "int", 72, 300),
             item("pdf_max_pages", "int", 1, 200),
             item("rectify_default", "bool"),
             item("http_port", "int", 1024, 65_535, restart: true),
@@ -3433,6 +3480,17 @@ actor VaporServer {
             }
         }
         return options
+    }
+
+    private static func effectivePDFDPI(
+        requested: Int?,
+        runtime: OCRRuntimeSettingsSnapshot
+    ) -> Int {
+        let selected = requested ?? runtime.pdfDPI
+        guard ProcessInfo.processInfo.thermalState == .critical else {
+            return selected
+        }
+        return min(selected, runtime.hotDPI)
     }
 
     private static func runtimeSettings(

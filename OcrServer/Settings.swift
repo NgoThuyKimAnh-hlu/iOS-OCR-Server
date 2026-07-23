@@ -48,6 +48,7 @@ struct OCRRuntimeSettingsSnapshot: Sendable {
     let multipassMinimumLengthRatio: Double
     let multipassMaximumLengthRatio: Double
     let pdfDPI: Int
+    let hotDPI: Int
     let pdfMaximumPages: Int
     let rectifyDefault: Bool
 
@@ -131,6 +132,7 @@ struct OCRRuntimeSettingsSnapshot: Sendable {
             multipassMinimumLengthRatio: multipassMinimumLengthRatio,
             multipassMaximumLengthRatio: multipassMaximumLengthRatio,
             pdfDPI: pdfDPI,
+            hotDPI: hotDPI,
             pdfMaximumPages: pdfMaximumPages,
             rectifyDefault: rectifyDefault
         )
@@ -372,8 +374,13 @@ final class Settings {
     }
 
     var pdfDPI: Int {
-        get { integer("pdfDPI", 200) }
+        get { integer("pdfDPI", 150) }
         set { defaults.set(newValue, forKey: "pdfDPI") }
+    }
+
+    var hotDPI: Int {
+        get { integer("hotDPI", 120) }
+        set { defaults.set(newValue, forKey: "hotDPI") }
     }
 
     var pdfMaximumPages: Int {
@@ -434,6 +441,7 @@ final class Settings {
             multipassMinimumLengthRatio: multipassMinimumLengthRatio,
             multipassMaximumLengthRatio: multipassMaximumLengthRatio,
             pdfDPI: pdfDPI,
+            hotDPI: hotDPI,
             pdfMaximumPages: pdfMaximumPages,
             rectifyDefault: rectifyDefault
         )
