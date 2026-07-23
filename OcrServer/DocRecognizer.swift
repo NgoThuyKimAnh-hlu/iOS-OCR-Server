@@ -18,8 +18,8 @@ class DocRecognizer {
     
     init(
         usesLanguageCorrection: Bool = true,
-        automaticallyDetectsLanguage: Bool = true,
-        recognitionLanguages: [String] = ["vi-VT", "en"],
+        automaticallyDetectsLanguage: Bool = false,
+        recognitionLanguages: [String] = ["vi-VT"],
         minimumTextHeight: Double = 0,
         customWords: [String] = []
     ) {

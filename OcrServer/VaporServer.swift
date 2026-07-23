@@ -35,6 +35,11 @@ struct OCRResult: Content, Sendable {
     let boxes: [OCRBoxItem]
 }
 
+private enum OCRContract {
+    // The PC engine depends on these response fields remaining stable.
+    static let schemaVersion = 1
+}
+
 struct DocOCRResult: Content {
     let success: Bool
     let message: String
@@ -52,6 +57,8 @@ struct DocOCRResult: Content {
     let pack_id: String
     let pack_version: String
     let pack_hash: String
+    let build_version: String
+    let schema_version: Int
 
     init(
         success: Bool,
@@ -76,6 +83,8 @@ struct DocOCRResult: Content {
         self.pack_id = improvement?.pack.id ?? "none"
         self.pack_version = improvement?.pack.version ?? ""
         self.pack_hash = improvement?.pack.hash ?? ""
+        self.build_version = BuildInfo.versionStamp
+        self.schema_version = OCRContract.schemaVersion
     }
 }
 
@@ -99,6 +108,8 @@ struct UploadResponse: Content {
     let pack_id: String
     let pack_version: String
     let pack_hash: String
+    let build_version: String
+    let schema_version: Int
 
     init(
         success: Bool,
@@ -129,6 +140,8 @@ struct UploadResponse: Content {
         self.pack_id = improvement?.pack.id ?? "none"
         self.pack_version = improvement?.pack.version ?? ""
         self.pack_hash = improvement?.pack.hash ?? ""
+        self.build_version = BuildInfo.versionStamp
+        self.schema_version = OCRContract.schemaVersion
     }
 }
 
@@ -153,6 +166,8 @@ struct PDFUploadPageResponse: Content {
     let pack_id: String
     let pack_version: String
     let pack_hash: String
+    let build_version: String
+    let schema_version: Int
 
     init(
         page: Int,
@@ -181,6 +196,8 @@ struct PDFUploadPageResponse: Content {
         self.pack_id = improvement?.pack.id ?? "none"
         self.pack_version = improvement?.pack.version ?? ""
         self.pack_hash = improvement?.pack.hash ?? ""
+        self.build_version = BuildInfo.versionStamp
+        self.schema_version = OCRContract.schemaVersion
     }
 }
 
@@ -189,6 +206,37 @@ struct PDFUploadResponse: Content {
     let message: String
     let pages: [PDFUploadPageResponse]
     let page_count: Int
+    let raw: String
+    let improved: String
+    let page_score: Double
+    let line_scores: [OCRLineScoreResponse]
+    let flags: [String]
+    let needs_pass2: Bool
+    let mean_confidence: Double
+    let corrections_applied: Int
+    let build_version: String
+    let schema_version: Int
+
+    init(success: Bool, message: String, pages: [PDFUploadPageResponse]) {
+        self.success = success
+        self.message = message
+        self.pages = pages
+        self.page_count = pages.count
+        self.raw = pages.map(\.raw).joined(separator: "\n\n")
+        self.improved = pages.map(\.improved).joined(separator: "\n\n")
+        self.page_score = pages.map(\.page_score).min() ?? 0
+        self.line_scores = pages.flatMap(\.line_scores)
+        self.flags = Array(Set(pages.flatMap(\.flags))).sorted()
+        self.needs_pass2 = pages.contains { $0.needs_pass2 }
+        self.mean_confidence = Self.mean(pages.map(\.mean_confidence))
+        self.corrections_applied = pages.reduce(0) { $0 + $1.corrections_applied }
+        self.build_version = BuildInfo.versionStamp
+        self.schema_version = OCRContract.schemaVersion
+    }
+
+    private static func mean(_ values: [Double]) -> Double {
+        values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count)
+    }
 }
 
 struct PDFDocOCRPageResponse: Content {
@@ -209,6 +257,8 @@ struct PDFDocOCRPageResponse: Content {
     let pack_id: String
     let pack_version: String
     let pack_hash: String
+    let build_version: String
+    let schema_version: Int
 
     init(
         page: Int,
@@ -234,6 +284,8 @@ struct PDFDocOCRPageResponse: Content {
         self.pack_id = improvement?.pack.id ?? "none"
         self.pack_version = improvement?.pack.version ?? ""
         self.pack_hash = improvement?.pack.hash ?? ""
+        self.build_version = BuildInfo.versionStamp
+        self.schema_version = OCRContract.schemaVersion
     }
 }
 
@@ -242,6 +294,37 @@ struct PDFDocOCRResponse: Content {
     let message: String
     let pages: [PDFDocOCRPageResponse]
     let page_count: Int
+    let raw: String
+    let improved: String
+    let page_score: Double
+    let line_scores: [OCRLineScoreResponse]
+    let flags: [String]
+    let needs_pass2: Bool
+    let mean_confidence: Double
+    let corrections_applied: Int
+    let build_version: String
+    let schema_version: Int
+
+    init(success: Bool, message: String, pages: [PDFDocOCRPageResponse]) {
+        self.success = success
+        self.message = message
+        self.pages = pages
+        self.page_count = pages.count
+        self.raw = pages.map(\.raw).joined(separator: "\n\n")
+        self.improved = pages.map(\.improved).joined(separator: "\n\n")
+        self.page_score = pages.map(\.page_score).min() ?? 0
+        self.line_scores = pages.flatMap(\.line_scores)
+        self.flags = Array(Set(pages.flatMap(\.flags))).sorted()
+        self.needs_pass2 = pages.contains { $0.needs_pass2 }
+        self.mean_confidence = Self.mean(pages.map(\.mean_confidence))
+        self.corrections_applied = pages.reduce(0) { $0 + $1.corrections_applied }
+        self.build_version = BuildInfo.versionStamp
+        self.schema_version = OCRContract.schemaVersion
+    }
+
+    private static func mean(_ values: [Double]) -> Double {
+        values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count)
+    }
 }
 
 struct BatchUploadResponse: Content {
@@ -550,7 +633,7 @@ actor VaporServer {
     // OCR 參數
     var recognitionLevel: RecognizeTextRequest.RecognitionLevel = .accurate
     var usesLanguageCorrection: Bool = true
-    var automaticallyDetectsLanguage: Bool = true
+    var automaticallyDetectsLanguage: Bool = false
 
     private(set) var isRunning: Bool = false
 
@@ -1194,13 +1277,35 @@ actor VaporServer {
             } catch {
                 return try Self.jsonResponse(
                     .badRequest,
-                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                    UploadResponse(
+                        success: false,
+                        message: error.localizedDescription,
+                        ocr_result: "",
+                        image_width: 0,
+                        image_height: 0,
+                        ocr_boxes: []
+                    )
                 )
             }
 
             let data = Self.byteBufferToData(upload.file.data)
             let baseRuntime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
-            let runtime = try Self.runtimeSettings(options: options, base: baseRuntime)
+            let runtime: OCRRuntimeSettingsSnapshot
+            do {
+                runtime = try Self.runtimeSettings(options: options, base: baseRuntime)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    UploadResponse(
+                        success: false,
+                        message: error.localizedDescription,
+                        ocr_result: "",
+                        image_width: 0,
+                        image_height: 0,
+                        ocr_boxes: []
+                    )
+                )
+            }
             let rectify = Self.booleanValue(options.rectify) ?? runtime.rectifyDefault
             let improve = Self.improveRequested(options: options, runtime: runtime)
             let metadata = Self.domainMetadata(
@@ -1264,14 +1369,20 @@ actor VaporServer {
                         PDFUploadResponse(
                             success: succeeded,
                             message: "Processed \(pages.count) of \(rendered.totalPageCount) PDF pages",
-                            pages: pages,
-                            page_count: pages.count
+                            pages: pages
                         )
                     )
                 } catch {
                     return try Self.jsonResponse(
                         Self.ocrErrorStatus(error),
-                        ComputeErrorResponse(success: false, message: error.localizedDescription)
+                        UploadResponse(
+                            success: false,
+                            message: error.localizedDescription,
+                            ocr_result: "",
+                            image_width: 0,
+                            image_height: 0,
+                            ocr_boxes: []
+                        )
                     )
                 }
             }
@@ -1296,7 +1407,15 @@ actor VaporServer {
             } catch {
                 return try Self.jsonResponse(
                     Self.ocrErrorStatus(error),
-                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                    UploadResponse(
+                        success: false,
+                        message: error.localizedDescription,
+                        ocr_result: "",
+                        image_width: 0,
+                        image_height: 0,
+                        ocr_boxes: [],
+                        rectified: rectify ? processed.rectified : nil
+                    )
                 )
             }
             if let result {
@@ -1982,13 +2101,29 @@ actor VaporServer {
             } catch {
                 return try Self.jsonResponse(
                     .badRequest,
-                    ComputeErrorResponse(success: false, message: error.localizedDescription)
+                    DocOCRResult(
+                        success: false,
+                        message: error.localizedDescription,
+                        ocr_text: ""
+                    )
                 )
             }
 
             let data = Self.byteBufferToData(upload.file.data)
             let baseRuntime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
-            let runtime = try Self.runtimeSettings(options: options, base: baseRuntime)
+            let runtime: OCRRuntimeSettingsSnapshot
+            do {
+                runtime = try Self.runtimeSettings(options: options, base: baseRuntime)
+            } catch {
+                return try Self.jsonResponse(
+                    .badRequest,
+                    DocOCRResult(
+                        success: false,
+                        message: error.localizedDescription,
+                        ocr_text: ""
+                    )
+                )
+            }
             let rectify = Self.booleanValue(options.rectify) ?? runtime.rectifyDefault
             let improve = Self.improveRequested(options: options, runtime: runtime)
             let metadata = Self.domainMetadata(
@@ -1996,7 +2131,19 @@ actor VaporServer {
                 upload: upload,
                 activePack: runtime.activePack
             )
-            let pack = try await OCRImprovementService.shared.resolvePack(metadata: metadata)
+            let pack: DomainPackSelection
+            do {
+                pack = try await OCRImprovementService.shared.resolvePack(metadata: metadata)
+            } catch {
+                return try Self.jsonResponse(
+                    Self.ocrErrorStatus(error),
+                    DocOCRResult(
+                        success: false,
+                        message: error.localizedDescription,
+                        ocr_text: ""
+                    )
+                )
+            }
 
             if #available(iOS 26, *) {
                 let docRecognizer = DocRecognizer(
@@ -2072,16 +2219,16 @@ actor VaporServer {
                             PDFDocOCRResponse(
                                 success: succeeded,
                                 message: "Processed \(pages.count) of \(rendered.totalPageCount) PDF pages",
-                                pages: pages,
-                                page_count: pages.count
+                                pages: pages
                             )
                         )
                     } catch {
                         return try Self.jsonResponse(
                             Self.ocrErrorStatus(error),
-                            ComputeErrorResponse(
+                            DocOCRResult(
                                 success: false,
-                                message: error.localizedDescription
+                                message: error.localizedDescription,
+                                ocr_text: ""
                             )
                         )
                     }
@@ -2110,7 +2257,12 @@ actor VaporServer {
                 } catch {
                     return try Self.jsonResponse(
                         Self.ocrErrorStatus(error),
-                        ComputeErrorResponse(success: false, message: error.localizedDescription)
+                        DocOCRResult(
+                            success: false,
+                            message: error.localizedDescription,
+                            ocr_text: "",
+                            rectified: rectify ? processed.rectified : nil
+                        )
                     )
                 }
                 if let result {

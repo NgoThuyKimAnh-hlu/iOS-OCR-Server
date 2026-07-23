@@ -84,9 +84,9 @@ final class TextRecognizer {
 
     init(
         recognitionLevel: RecognizeTextRequest.RecognitionLevel = .accurate,
-        recognitionLanguages: [String] = ["vi-VT", "en"],
+        recognitionLanguages: [String] = ["vi-VT"],
         usesLanguageCorrection: Bool = true,
-        automaticallyDetectsLanguage: Bool = true,
+        automaticallyDetectsLanguage: Bool = false,
         minimumTextHeight: Double = 0,
         visionRevision: Int = 0
     ) {

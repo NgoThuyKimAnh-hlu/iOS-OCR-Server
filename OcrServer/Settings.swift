@@ -169,7 +169,7 @@ final class Settings {
     }
 
     var recognitionLanguages: [String] {
-        get { defaults.stringArray(forKey: "recognitionLanguages") ?? ["vi-VT", "en"] }
+        get { defaults.stringArray(forKey: "recognitionLanguages") ?? ["vi-VT"] }
         set { defaults.set(newValue, forKey: "recognitionLanguages") }
     }
 
@@ -179,7 +179,7 @@ final class Settings {
     }
 
     var automaticallyDetectsLanguage: Bool {
-        get { boolean("automaticallyDetectsLanguage", true) }
+        get { boolean("automaticallyDetectsLanguage", false) }
         set { defaults.set(newValue, forKey: "automaticallyDetectsLanguage") }
     }
 
