@@ -59,6 +59,15 @@ struct OCRImproveHealthStatus: Content, Sendable {
     let custom_packs: Int
 }
 
+struct KeepAliveHealthStatus: Content, Sendable {
+    let active: Bool
+    let own_session: Bool
+    let reheals: Int
+    let last_error: String?
+    let engine_running: Bool
+    let player_playing: Bool
+}
+
 struct ServerHealthResponse: Content, Sendable {
     let status: String
     let uptime_s: Int
@@ -69,7 +78,7 @@ struct ServerHealthResponse: Content, Sendable {
     let requests_ok: Int
     let requests_fail: Int
     let auto_restarts: Int
-    let keep_alive: Bool
+    let keep_alive: KeepAliveHealthStatus
     let battery: ServerBatteryStatus
     let thermal: String
     let thermal_throttling: Bool
@@ -163,12 +172,12 @@ final class ServerTelemetry: ObservableObject {
 
     func healthResponse(
         port: Int,
-        keepAlive: Bool,
         customization: OCRCustomizationSummary,
         customWordsCount: Int,
         thermalStatus: ThermalStatusSnapshot
     ) -> ServerHealthResponse {
         let device = UIDevice.current
+        let keepAlive = KeepAliveService.shared
         let level = device.batteryLevel >= 0
             ? Int((device.batteryLevel * 100).rounded())
             : nil
@@ -184,7 +193,14 @@ final class ServerTelemetry: ObservableObject {
             requests_ok: requestsOK,
             requests_fail: requestsFail,
             auto_restarts: autoRestarts,
-            keep_alive: keepAlive,
+            keep_alive: KeepAliveHealthStatus(
+                active: keepAlive.isActive,
+                own_session: Settings.shared.keepAliveOwnSession,
+                reheals: keepAlive.reheals,
+                last_error: keepAlive.lastError,
+                engine_running: keepAlive.engineRunning,
+                player_playing: keepAlive.playerPlaying
+            ),
             battery: ServerBatteryStatus(
                 level: level,
                 state: Self.batteryStateName(device.batteryState)
@@ -212,14 +228,12 @@ final class ServerTelemetry: ObservableObject {
 
     func statsResponse(
         port: Int,
-        keepAlive: Bool,
         customization: OCRCustomizationSummary,
         customWordsCount: Int,
         thermalStatus: ThermalStatusSnapshot
     ) -> ServerStatsResponse {
         let health = healthResponse(
             port: port,
-            keepAlive: keepAlive,
             customization: customization,
             customWordsCount: customWordsCount,
             thermalStatus: thermalStatus
@@ -234,7 +248,7 @@ final class ServerTelemetry: ObservableObject {
             requests_ok: health.requests_ok,
             requests_fail: health.requests_fail,
             auto_restarts: health.auto_restarts,
-            keep_alive: health.keep_alive,
+            keep_alive: health.keep_alive.active,
             battery: health.battery,
             thermal: health.thermal,
             thermal_throttling: health.thermal_throttling,

@@ -15,6 +15,9 @@ final class KeepAliveService: ObservableObject {
     @Published private(set) var lastError: String?
     @Published private(set) var reheals = 0
 
+    var engineRunning: Bool { audioEngine.isRunning }
+    var playerPlaying: Bool { playerNode.isPlaying }
+
     private var audioEngine = AVAudioEngine()
     private var playerNode = AVAudioPlayerNode()
     private var keepAliveBuffer: AVAudioPCMBuffer?

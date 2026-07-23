@@ -984,7 +984,6 @@ actor VaporServer {
             let health = await MainActor.run {
                 ServerTelemetry.shared.healthResponse(
                     port: port,
-                    keepAlive: KeepAliveService.shared.isActive,
                     customization: customization,
                     customWordsCount: customWordsCount,
                     thermalStatus: thermalStatus
@@ -1005,7 +1004,6 @@ actor VaporServer {
             let stats = await MainActor.run {
                 ServerTelemetry.shared.statsResponse(
                     port: port,
-                    keepAlive: KeepAliveService.shared.isActive,
                     customization: customization,
                     customWordsCount: customWordsCount,
                     thermalStatus: thermalStatus
