@@ -8,6 +8,7 @@ import UIKit
 
 struct ContentView: View {
     @ObservedObject var serverManager: VaporServerManager
+    @EnvironmentObject private var displayMode: DisplayModeController
     @StateObject private var telemetry = ServerTelemetry.shared
     @StateObject private var sampler = Sampler()
     @StateObject private var serviceMonitor = ServiceStatusMonitor()
@@ -39,6 +40,7 @@ struct ContentView: View {
                 ScrollView {
                     VStack(spacing: 18) {
                         addressCard
+                        blackoutButton
                         serviceGrid
                         requestMetrics
                         systemMonitorCard
@@ -77,10 +79,12 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showingMonitor) {
             DashboardView()
+                .blackoutCovered(when: displayMode.isBlackout)
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView(serverManager: serverManager)
                 .preferredColorScheme(.dark)
+                .blackoutCovered(when: displayMode.isBlackout)
         }
         .onAppear {
             serverManager.refreshNetworkAddresses()
@@ -88,6 +92,11 @@ struct ContentView: View {
         }
         .onDisappear {
             sampler.stop()
+        }
+        .onChange(of: displayMode.isBlackout) { _, isBlackout in
+            guard isBlackout else { return }
+            showingMonitor = false
+            showingSettings = false
         }
         .task {
             while !Task.isCancelled {
@@ -99,6 +108,36 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private var blackoutButton: some View {
+        Button {
+            displayMode.enterBlackout()
+        } label: {
+            HStack(spacing: 13) {
+                Text("🌑 Blackout")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(.white)
+                Spacer()
+                Text("FARM MODE")
+                    .font(.caption2.monospaced().weight(.heavy))
+                    .foregroundStyle(ConsolePalette.background)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(ConsolePalette.teal)
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color.black)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(ConsolePalette.teal.opacity(0.65), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Covers the display in black while the app stays in the foreground")
     }
 
     private var addressCard: some View {
@@ -597,6 +636,7 @@ private enum ConsolePalette {
 
 #Preview {
     ContentView(serverManager: VaporServerManager())
+        .environmentObject(DisplayModeController.shared)
 }
 
 extension Bundle {
