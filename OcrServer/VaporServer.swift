@@ -695,7 +695,7 @@ actor VaporServer {
             return try Self.jsonResponse(.ok, settings)
         }
 
-        app.post("admin", "settings") { req async throws -> Response in
+        app.on(.POST, "admin", "settings", body: .collect(maxSize: "8mb")) { req async throws -> Response in
             try await Self.requireAdminToken(request: req)
 
             let patch: AdminSettingsPatch
@@ -775,7 +775,7 @@ actor VaporServer {
             )
         }
 
-        app.post("admin", "customwords") { req async throws -> Response in
+        app.on(.POST, "admin", "customwords", body: .collect(maxSize: "8mb")) { req async throws -> Response in
             try await Self.requireAdminToken(request: req)
             let payload = try req.content.decode(AdminCustomWordsRequest.self)
             try Self.validateWords(payload.words)
@@ -798,7 +798,7 @@ actor VaporServer {
             )
         }
 
-        app.post("admin", "corrections") { req async throws -> Response in
+        app.on(.POST, "admin", "corrections", body: .collect(maxSize: "8mb")) { req async throws -> Response in
             try await Self.requireAdminToken(request: req)
             let payload = try req.content.decode(AdminCorrectionsRequest.self)
             try Self.validateOverrides(payload.overrides)
@@ -808,7 +808,7 @@ actor VaporServer {
             )
         }
 
-        app.post("admin", "pack") { req async throws -> Response in
+        app.on(.POST, "admin", "pack", body: .collect(maxSize: "8mb")) { req async throws -> Response in
             try await Self.requireAdminToken(request: req)
             let payload = try req.content.decode(AdminPackRequest.self)
             try Self.validatePackID(payload.id)
