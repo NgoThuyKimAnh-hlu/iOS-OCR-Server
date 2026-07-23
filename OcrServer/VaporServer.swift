@@ -32,12 +32,14 @@ struct OCRResult: Content, Sendable {
     let text: String
     let image_width: Int
     let image_height: Int
+    let orientation: Int
     let boxes: [OCRBoxItem]
 }
 
 private enum OCRContract {
     // The PC engine depends on these response fields remaining stable.
     static let schemaVersion = 1
+    static let bboxCoordinateSystem = "vision_normalized_origin_bottom_left_range_0_1"
 }
 
 struct DocOCRResult: Content {
@@ -111,6 +113,10 @@ struct UploadResponse: Content {
     let line_scores: [OCRLineScoreResponse]
     let flags: [String]
     let needs_pass2: Bool
+    let pass2_regions: [OCRPass2RegionResponse]
+    let full_page_fallback: Bool
+    let bbox_coordinate_system: String
+    let orientation: Int?
     let corrections_applied: Int
     let improve_ms: Double
     let pack_id: String
@@ -147,6 +153,10 @@ struct UploadResponse: Content {
         self.line_scores = improvement?.lineScores ?? []
         self.flags = improvement?.flags ?? []
         self.needs_pass2 = improvement?.needsPass2 ?? false
+        self.pass2_regions = improvement?.pass2Regions ?? []
+        self.full_page_fallback = improvement?.fullPageFallback ?? false
+        self.bbox_coordinate_system = OCRContract.bboxCoordinateSystem
+        self.orientation = improvement?.ocrResult.orientation
         self.corrections_applied = improvement?.correctionsApplied ?? 0
         self.improve_ms = improvement?.improveMilliseconds ?? 0
         self.pack_id = improvement?.pack.id ?? "none"
@@ -177,6 +187,10 @@ struct PDFUploadPageResponse: Content {
     let line_scores: [OCRLineScoreResponse]
     let flags: [String]
     let needs_pass2: Bool
+    let pass2_regions: [OCRPass2RegionResponse]
+    let full_page_fallback: Bool
+    let bbox_coordinate_system: String
+    let orientation: Int?
     let corrections_applied: Int
     let improve_ms: Double
     let pack_id: String
@@ -211,6 +225,10 @@ struct PDFUploadPageResponse: Content {
         self.line_scores = improvement?.lineScores ?? []
         self.flags = improvement?.flags ?? []
         self.needs_pass2 = improvement?.needsPass2 ?? true
+        self.pass2_regions = improvement?.pass2Regions ?? []
+        self.full_page_fallback = improvement?.fullPageFallback ?? true
+        self.bbox_coordinate_system = OCRContract.bboxCoordinateSystem
+        self.orientation = improvement?.ocrResult.orientation
         self.corrections_applied = improvement?.correctionsApplied ?? 0
         self.improve_ms = improvement?.improveMilliseconds ?? 0
         self.pack_id = improvement?.pack.id ?? "none"
@@ -236,6 +254,7 @@ struct PDFUploadResponse: Content {
     let line_scores: [OCRLineScoreResponse]
     let flags: [String]
     let needs_pass2: Bool
+    let full_page_fallback: Bool
     let mean_confidence: Double
     let corrections_applied: Int
     let build_version: String
@@ -255,6 +274,7 @@ struct PDFUploadResponse: Content {
         self.line_scores = pages.flatMap(\.line_scores)
         self.flags = Array(Set(pages.flatMap(\.flags))).sorted()
         self.needs_pass2 = pages.contains { $0.needs_pass2 }
+        self.full_page_fallback = pages.contains { $0.full_page_fallback }
         self.mean_confidence = Self.mean(pages.map(\.mean_confidence))
         self.corrections_applied = pages.reduce(0) { $0 + $1.corrections_applied }
         self.build_version = BuildInfo.versionStamp
@@ -625,6 +645,7 @@ struct AdminSettingsResponse: Content, Sendable {
     let roi_upscale: Double
     let max_roi_count: Int
     let page_score_pass2_threshold: Double
+    let pass2_fallback_ratio: Double
     let legal_id_regex: String
     let possible_legal_id_regex: String
     let candidate_gap_threshold: Double
@@ -674,6 +695,7 @@ struct AdminSettingsPatch: Content, Sendable {
     let roi_upscale: Double?
     let max_roi_count: Int?
     let page_score_pass2_threshold: Double?
+    let pass2_fallback_ratio: Double?
     let legal_id_regex: String?
     let possible_legal_id_regex: String?
     let candidate_gap_threshold: Double?
@@ -2823,6 +2845,7 @@ actor VaporServer {
             roi_upscale: settings.roiUpscale,
             max_roi_count: settings.maximumROIs,
             page_score_pass2_threshold: settings.pageScorePass2Threshold,
+            pass2_fallback_ratio: settings.pass2FallbackRatio,
             legal_id_regex: settings.legalIDRegex,
             possible_legal_id_regex: settings.possibleLegalIDRegex,
             candidate_gap_threshold: settings.candidateGapThreshold,
@@ -2964,6 +2987,11 @@ actor VaporServer {
         if let value = patch.page_score_pass2_threshold {
             applyDouble(value, key: "page_score_pass2_threshold", range: 0...1, applied: &applied, rejected: &rejected) {
                 settings.pageScorePass2Threshold = $0
+            }
+        }
+        if let value = patch.pass2_fallback_ratio {
+            applyDouble(value, key: "pass2_fallback_ratio", range: 0...1, applied: &applied, rejected: &rejected) {
+                settings.pass2FallbackRatio = $0
             }
         }
         if let value = patch.legal_id_regex {
@@ -3165,6 +3193,7 @@ actor VaporServer {
             item("roi_upscale", "double", 1, 4),
             item("max_roi_count", "int", 0, 20),
             item("page_score_pass2_threshold", "double", 0, 1),
+            item("pass2_fallback_ratio", "double", 0, 1),
             item("legal_id_regex", "string", 1, 2_000),
             item("possible_legal_id_regex", "string", 1, 2_000),
             item("candidate_gap_threshold", "double", 0, 1),

@@ -31,6 +31,7 @@ struct OCRRuntimeSettingsSnapshot: Sendable {
     let improveEnabled: Bool
     let debugVerbose: Bool
     let pageScorePass2Threshold: Double
+    let pass2FallbackRatio: Double
     let legalIDRegex: String
     let possibleLegalIDRegex: String
     let candidateGapThreshold: Double
@@ -71,6 +72,7 @@ struct OCRRuntimeSettingsSnapshot: Sendable {
             maximumROIs: maximumROIs,
             correctorGroups: correctorGroups,
             pageScorePass2Threshold: pageScorePass2Threshold,
+            pass2FallbackRatio: pass2FallbackRatio,
             legalIDRegex: legalIDRegex,
             possibleLegalIDRegex: possibleLegalIDRegex,
             candidateGapThreshold: candidateGapThreshold,
@@ -115,6 +117,7 @@ struct OCRRuntimeSettingsSnapshot: Sendable {
             improveEnabled: improveEnabled,
             debugVerbose: debugVerbose,
             pageScorePass2Threshold: pageScorePass2Threshold,
+            pass2FallbackRatio: pass2FallbackRatio,
             legalIDRegex: legalIDRegex,
             possibleLegalIDRegex: possibleLegalIDRegex,
             candidateGapThreshold: candidateGapThreshold,
@@ -287,6 +290,11 @@ final class Settings {
         set { defaults.set(newValue, forKey: "pageScorePass2Threshold") }
     }
 
+    var pass2FallbackRatio: Double {
+        get { double("pass2FallbackRatio", 0.40) }
+        set { defaults.set(newValue, forKey: "pass2FallbackRatio") }
+    }
+
     var legalIDRegex: String {
         get {
             defaults.string(forKey: "legalIDRegex")
@@ -424,6 +432,7 @@ final class Settings {
             improveEnabled: improveEnabled,
             debugVerbose: debugVerbose,
             pageScorePass2Threshold: pageScorePass2Threshold,
+            pass2FallbackRatio: pass2FallbackRatio,
             legalIDRegex: legalIDRegex,
             possibleLegalIDRegex: possibleLegalIDRegex,
             candidateGapThreshold: candidateGapThreshold,

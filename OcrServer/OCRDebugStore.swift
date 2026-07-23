@@ -24,6 +24,8 @@ struct OCRDebugQualityEnvelope: Content, Sendable {
     let line_scores: [OCRLineScoreResponse]
     let flags: [String]
     let needs_pass2: Bool
+    let pass2_regions: [OCRPass2RegionResponse]
+    let full_page_fallback: Bool
 }
 
 struct OCRDebugTiming: Content, Sendable {
@@ -55,6 +57,7 @@ struct OCRDebugConfigSnapshot: Content, Sendable {
     let multipass: Bool
     let roi_upscale: Double
     let page_score_pass2_threshold: Double
+    let pass2_fallback_ratio: Double
     let legal_id_regex: String
     let corrector_groups: [String]
     let active_pack: String
@@ -148,7 +151,9 @@ enum OCRDebugTraceFactory {
                 page_score: result.pageScore,
                 line_scores: result.lineScores,
                 flags: result.flags,
-                needs_pass2: result.needsPass2
+                needs_pass2: result.needsPass2,
+                pass2_regions: result.pass2Regions,
+                full_page_fallback: result.fullPageFallback
             ),
             timing: OCRDebugTiming(
                 vision_ms: result.visionMilliseconds,
@@ -172,6 +177,7 @@ enum OCRDebugTraceFactory {
                 multipass: runtime.multipassEnabled,
                 roi_upscale: runtime.roiUpscale,
                 page_score_pass2_threshold: runtime.pageScorePass2Threshold,
+                pass2_fallback_ratio: runtime.pass2FallbackRatio,
                 legal_id_regex: runtime.legalIDRegex,
                 corrector_groups: runtime.correctorGroups.map(\.rawValue).sorted(),
                 active_pack: runtime.activePack,

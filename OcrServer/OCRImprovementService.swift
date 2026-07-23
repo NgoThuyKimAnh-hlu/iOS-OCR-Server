@@ -29,6 +29,13 @@ struct OCRLineScoreResponse: Content, Sendable {
     let bbox: OCRNormalizedBoxResponse
 }
 
+struct OCRPass2RegionResponse: Content, Sendable {
+    let line_index: Int
+    let bbox: OCRNormalizedBoxResponse
+    let raw_text: String
+    let neighbor_lines: [String]
+}
+
 struct DomainPackSelection: Sendable {
     let id: String
     let version: String
@@ -44,6 +51,7 @@ struct OCRImprovementConfiguration: Sendable {
     let maximumROIs: Int
     let correctorGroups: Set<CorrectorGroup>
     let pageScorePass2Threshold: Double
+    let pass2FallbackRatio: Double
     let legalIDRegex: String
     let possibleLegalIDRegex: String
     let candidateGapThreshold: Double
@@ -68,6 +76,7 @@ struct OCRImprovementConfiguration: Sendable {
         maximumROIs: 4,
         correctorGroups: Set(CorrectorGroup.allCases),
         pageScorePass2Threshold: 0.70,
+        pass2FallbackRatio: 0.40,
         legalIDRegex: "\\b\\d{1,4}/\\d{4}/[A-ZĐ][A-ZĐ0-9-]*\\b",
         possibleLegalIDRegex: "\\b[0-9OIl]{1,4}\\s*[/|]\\s*[0-9OIl]{2,4}\\s*[/|]\\s*[A-ZĐ0-9][A-ZĐ0-9 -]{1,20}",
         candidateGapThreshold: 0.015,
@@ -97,6 +106,8 @@ struct OCRImprovementResult: Sendable {
     let lineScores: [OCRLineScoreResponse]
     let flags: [String]
     let needsPass2: Bool
+    let pass2Regions: [OCRPass2RegionResponse]
+    let fullPageFallback: Bool
     let correctionsApplied: Int
     let improveMilliseconds: Double
     let visionMilliseconds: Double
@@ -231,6 +242,7 @@ private struct OCRQualityAssessment {
     let flags: [String]
     let needsPass2: Bool
     let retryLineIndexes: [Int]
+    let uncertainLineIndexes: [Int]
 }
 
 private enum OCRQualityAnalyzer {
@@ -322,7 +334,8 @@ private enum OCRQualityAnalyzer {
             flags: flags,
             needsPass2: !flags.isEmpty
                 || pageScore < configuration.pageScorePass2Threshold,
-            retryLineIndexes: retryIndexes
+            retryLineIndexes: retryIndexes,
+            uncertainLineIndexes: lowConfidenceIndexes
         )
     }
 
@@ -589,8 +602,19 @@ actor OCRImprovementService {
             text: selectedText,
             image_width: selectedVision.imageWidth,
             image_height: selectedVision.imageHeight,
+            orientation: selectedVision.orientation,
             boxes: boxes
         )
+        let pass2Regions = Self.pass2Regions(
+            from: selectedVision.lines,
+            indexes: finalQuality.uncertainLineIndexes
+        )
+        let uncertainRatio = selectedVision.lines.isEmpty
+            ? 1
+            : Double(pass2Regions.count) / Double(selectedVision.lines.count)
+        let fullPageFallback = finalQuality.needsPass2
+            && (pass2Regions.isEmpty
+                || uncertainRatio > configuration.pass2FallbackRatio)
         return OCRImprovementResult(
             raw: rawText,
             improved: improve ? correctedText : rawText,
@@ -601,6 +625,8 @@ actor OCRImprovementService {
             lineScores: finalQuality.lineScores,
             flags: finalQuality.flags,
             needsPass2: finalQuality.needsPass2,
+            pass2Regions: pass2Regions,
+            fullPageFallback: fullPageFallback,
             correctionsApplied: correctionCount,
             improveMilliseconds: multipassMilliseconds + correctMilliseconds,
             visionMilliseconds: initial.visionMilliseconds,
@@ -613,6 +639,30 @@ actor OCRImprovementService {
             visionLines: selectedVision.lines,
             correctionTrace: correctionTrace
         )
+    }
+
+    private static func pass2Regions(
+        from lines: [OCRVisionLine],
+        indexes: [Int]
+    ) -> [OCRPass2RegionResponse] {
+        indexes.compactMap { index in
+            guard lines.indices.contains(index) else { return nil }
+            let line = lines[index]
+            let neighbors = [index - 1, index + 1].compactMap { neighbor in
+                lines.indices.contains(neighbor) ? lines[neighbor].text : nil
+            }
+            return OCRPass2RegionResponse(
+                line_index: index + 1,
+                bbox: OCRNormalizedBoxResponse(
+                    x: line.normalizedBox.x,
+                    y: line.normalizedBox.y,
+                    width: line.normalizedBox.width,
+                    height: line.normalizedBox.height
+                ),
+                raw_text: line.text,
+                neighbor_lines: neighbors
+            )
+        }
     }
 
     private static func boxes(

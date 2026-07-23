@@ -52,6 +52,7 @@ struct OCRVisionLine: Sendable {
 struct OCRVisionOutput: Sendable {
     let imageWidth: Int
     let imageHeight: Int
+    let orientation: Int
     var lines: [OCRVisionLine]
     let visionMilliseconds: Double
     let customWordsCount: Int
@@ -70,6 +71,7 @@ struct OCRVisionOutput: Sendable {
             text: text,
             image_width: imageWidth,
             image_height: imageHeight,
+            orientation: orientation,
             boxes: lines.map(\.pixelBox)
         )
     }
@@ -112,9 +114,11 @@ final class TextRecognizer {
         customWords: [String],
         maximumCandidates: Int = 2
     ) async -> OCRVisionOutput? {
-        guard let (width, height) = Self.imagePixelSize(from: data) else {
+        guard let metadata = Self.imageMetadata(from: data) else {
             return nil
         }
+        let width = metadata.width
+        let height = metadata.height
 
         var request = RecognizeTextRequest(visionRevision == 3 ? .revision3 : nil)
         request.recognitionLevel = recognitionLevel
@@ -230,13 +234,16 @@ final class TextRecognizer {
         return OCRVisionOutput(
             imageWidth: width,
             imageHeight: height,
+            orientation: metadata.orientation,
             lines: lines,
             visionMilliseconds: visionMilliseconds,
             customWordsCount: customWordsCount
         )
     }
 
-    private static func imagePixelSize(from data: Data) -> (Int, Int)? {
+    private static func imageMetadata(
+        from data: Data
+    ) -> (width: Int, height: Int, orientation: Int)? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let properties = CGImageSourceCopyPropertiesAtIndex(
                 source,
@@ -247,7 +254,10 @@ final class TextRecognizer {
               let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue else {
             return nil
         }
-        return (width, height)
+        let rawOrientation = (
+            properties[kCGImagePropertyOrientation] as? NSNumber
+        )?.intValue ?? 1
+        return (width, height, (1...8).contains(rawOrientation) ? rawOrientation : 1)
     }
 
     private static func elapsedMilliseconds(since started: UInt64) -> Double {
