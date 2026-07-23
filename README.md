@@ -17,6 +17,11 @@ No cloud dependencies, unlimited usage, complete privacy.
 4. Integrate the service into your applications via API
 5. To ensure the app runs continuously without interruption, please enable iOS [Guided Access](https://support.apple.com/en-us/111795) mode and keep the screen on
 
+For 24/7 farm use, enable **Giữ màn hình luôn sáng**, start Guided Access,
+connect power, then tap **🌑 Blackout**. The app remains foreground with the
+display electrically on, while the absolute-black view and brightness 0 reduce
+OLED power and burn-in risk. Double-tap the black screen to return.
+
 - **OCR Test: On your computer, open a web browser and navigate to the IP address displayed by the app to perform an OCR test.**
 
 ## Offline Field Console

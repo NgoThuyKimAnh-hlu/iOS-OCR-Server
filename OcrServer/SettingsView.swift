@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State var autoDetectLanguage = Settings.shared.automaticallyDetectsLanguage
     @State var keepAliveEnabled = Settings.shared.keepAliveEnabled
     @State var autoBlackoutIdleSeconds = Settings.shared.autoBlackoutIdleSeconds
+    @State var keepScreenAwake = Settings.shared.keepScreenAwake
     @State var adminToken = Settings.shared.adminToken
     @State var improveEnabled = Settings.shared.improveEnabled
     @State var debugVerbose = Settings.shared.debugVerbose
@@ -83,6 +84,11 @@ struct SettingsView: View {
                     }
 
                     Section("Farm Mode") {
+                        SettingsRow2(
+                            icon: "sun.max.fill",
+                            title: "Giữ màn hình luôn sáng",
+                            isOn: $keepScreenAwake
+                        )
                         HStack(spacing: 12) {
                             Image(systemName: "moon.zzz.fill")
                                 .font(.title2)
@@ -107,6 +113,9 @@ struct SettingsView: View {
                             .frame(width: 90)
                         }
                         .padding(.vertical, 4)
+                        Text("Farm: bật Guided Access + Blackout + cắm sạc → màn đen, WiFi sống, chạy 24/7.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     
                     Button(action: apply) {
@@ -162,6 +171,9 @@ struct SettingsView: View {
                 }
                 Settings.shared.autoBlackoutIdleSeconds = normalized
                 DisplayModeController.shared.refreshAutoBlackoutSchedule()
+            }
+            .onChange(of: keepScreenAwake) { oldValue, newValue in
+                DisplayModeController.shared.setKeepScreenAwake(newValue)
             }
             .onChange(of: adminToken) { oldValue, newValue in
                 Settings.shared.adminToken = newValue.trimmingCharacters(

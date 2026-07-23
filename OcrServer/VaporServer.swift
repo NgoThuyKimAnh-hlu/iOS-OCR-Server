@@ -671,6 +671,7 @@ struct AdminSettingsResponse: Content, Sendable {
     let keep_alive_own_session: Bool
     let auto_blackout_idle_s: Int
     let blackout: Bool
+    let keep_screen_awake: Bool
     let watchdog_interval_s: Double
     let debug_verbose: Bool
     let admin_token: String
@@ -726,6 +727,7 @@ struct AdminSettingsPatch: Content, Sendable {
     let keep_alive_own_session: Bool?
     let auto_blackout_idle_s: Int?
     let blackout: Bool?
+    let keep_screen_awake: Bool?
     let watchdog_interval_s: Double?
     let debug_verbose: Bool?
     let admin_token: String?
@@ -2914,6 +2916,7 @@ actor VaporServer {
             keep_alive_own_session: settings.keepAliveOwnSession,
             auto_blackout_idle_s: settings.autoBlackoutIdleSeconds,
             blackout: DisplayModeController.shared.isBlackout,
+            keep_screen_awake: settings.keepScreenAwake,
             watchdog_interval_s: settings.watchdogIntervalSeconds,
             debug_verbose: settings.debugVerbose,
             admin_token: settings.adminToken,
@@ -3158,6 +3161,10 @@ actor VaporServer {
             DisplayModeController.shared.setBlackout(value)
             applied.append("blackout")
         }
+        if let value = patch.keep_screen_awake {
+            DisplayModeController.shared.setKeepScreenAwake(value)
+            applied.append("keep_screen_awake")
+        }
         if let value = patch.debug_verbose {
             settings.debugVerbose = value
             applied.append("debug_verbose")
@@ -3294,6 +3301,7 @@ actor VaporServer {
             item("keep_alive_own_session", "bool"),
             item("auto_blackout_idle_s", "int", 0),
             item("blackout", "bool"),
+            item("keep_screen_awake", "bool"),
             item("watchdog_interval_s", "double", 10, 3600),
             item("debug_verbose", "bool"),
             item("admin_token", "string", 0, 512, secret: true),

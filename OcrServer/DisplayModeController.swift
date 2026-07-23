@@ -36,9 +36,7 @@ final class DisplayModeController: ObservableObject {
 
         isBlackout = false
         restoreBrightness(keepSavedValue: false)
-        if sceneIsActive {
-            UIApplication.shared.isIdleTimerDisabled = true
-        }
+        applyActiveDisplayState()
         scheduleAutoBlackout()
     }
 
@@ -59,6 +57,11 @@ final class DisplayModeController: ObservableObject {
         scheduleAutoBlackout()
     }
 
+    func setKeepScreenAwake(_ enabled: Bool) {
+        Settings.shared.keepScreenAwake = enabled
+        applyActiveDisplayState()
+    }
+
     func sceneActivityChanged(isActive: Bool) {
         sceneIsActive = isActive
         if isActive {
@@ -75,7 +78,8 @@ final class DisplayModeController: ObservableObject {
     private func applyActiveDisplayState() {
         guard sceneIsActive else { return }
 
-        UIApplication.shared.isIdleTimerDisabled = true
+        UIApplication.shared.isIdleTimerDisabled = isBlackout
+            || Settings.shared.keepScreenAwake
         if isBlackout {
             UIScreen.main.brightness = 0
         }

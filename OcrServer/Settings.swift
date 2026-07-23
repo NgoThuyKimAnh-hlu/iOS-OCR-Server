@@ -213,6 +213,11 @@ final class Settings {
         set { defaults.set(max(0, newValue), forKey: "autoBlackoutIdleSeconds") }
     }
 
+    var keepScreenAwake: Bool {
+        get { boolean("keepScreenAwake", true) }
+        set { defaults.set(newValue, forKey: "keepScreenAwake") }
+    }
+
     var watchdogIntervalSeconds: Double {
         get { double("watchdogIntervalSeconds", 60) }
         set { defaults.set(newValue, forKey: "watchdogIntervalSeconds") }

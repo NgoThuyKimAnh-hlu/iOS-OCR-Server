@@ -58,6 +58,16 @@ final class UserActivityGestureRecognizer: UIGestureRecognizer {
     init(onActivity: @escaping @MainActor () -> Void) {
         self.onActivity = onActivity
         super.init(target: nil, action: nil)
+        configureTouchObservation()
+    }
+
+    required init?(coder: NSCoder) {
+        onActivity = {}
+        super.init(coder: coder)
+        configureTouchObservation()
+    }
+
+    private func configureTouchObservation() {
         cancelsTouchesInView = false
         delaysTouchesBegan = false
         delaysTouchesEnded = false
