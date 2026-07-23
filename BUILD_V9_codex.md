@@ -111,4 +111,3 @@ apply path.
   reachable was not independently reproduced here. The implementation avoids
   backgrounding, but 24/7 reachability is not claimed proven until observed on
   the target phone.
-
