@@ -668,6 +668,7 @@ struct AdminSettingsResponse: Content, Sendable {
     let rectify_default: Bool
     let http_port: Int
     let keep_alive: Bool
+    let keep_alive_own_session: Bool
     let watchdog_interval_s: Double
     let debug_verbose: Bool
     let admin_token: String
@@ -720,6 +721,7 @@ struct AdminSettingsPatch: Content, Sendable {
     let rectify_default: Bool?
     let http_port: Int?
     let keep_alive: Bool?
+    let keep_alive_own_session: Bool?
     let watchdog_interval_s: Double?
     let debug_verbose: Bool?
     let admin_token: String?
@@ -2906,6 +2908,7 @@ actor VaporServer {
             rectify_default: settings.rectifyDefault,
             http_port: settings.httpPort,
             keep_alive: settings.keepAliveEnabled,
+            keep_alive_own_session: settings.keepAliveOwnSession,
             watchdog_interval_s: settings.watchdogIntervalSeconds,
             debug_verbose: settings.debugVerbose,
             admin_token: settings.adminToken,
@@ -3133,6 +3136,10 @@ actor VaporServer {
             KeepAliveService.shared.setEnabled(value)
             applied.append("keep_alive")
         }
+        if let value = patch.keep_alive_own_session {
+            KeepAliveService.shared.setOwnSession(value)
+            applied.append("keep_alive_own_session")
+        }
         if let value = patch.debug_verbose {
             settings.debugVerbose = value
             applied.append("debug_verbose")
@@ -3266,6 +3273,7 @@ actor VaporServer {
             item("rectify_default", "bool"),
             item("http_port", "int", 1024, 65_535, restart: true),
             item("keep_alive", "bool"),
+            item("keep_alive_own_session", "bool"),
             item("watchdog_interval_s", "double", 10, 3600),
             item("debug_verbose", "bool"),
             item("admin_token", "string", 0, 512, secret: true),

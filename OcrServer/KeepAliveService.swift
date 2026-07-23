@@ -62,10 +62,30 @@ final class KeepAliveService: ObservableObject {
         enabled ? start() : stop()
     }
 
+    func setOwnSession(_ ownSession: Bool) {
+        let changed = Settings.shared.keepAliveOwnSession != ownSession
+        Settings.shared.keepAliveOwnSession = ownSession
+        guard changed else { return }
+
+        if !ownSession {
+            ServerTelemetry.shared.recordSystemEvent(
+                method: "KEEPALIVE",
+                path: "/audio/mixed-session/less-reliable",
+                status: 0
+            )
+        }
+        if Settings.shared.keepAliveEnabled {
+            start()
+        }
+    }
+
     func start() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            let options: AVAudioSession.CategoryOptions = Settings.shared.keepAliveOwnSession
+                ? []
+                : [.mixWithOthers]
+            try session.setCategory(.playback, mode: .default, options: options)
             try session.setActive(true)
             try configureEngineIfNeeded()
 

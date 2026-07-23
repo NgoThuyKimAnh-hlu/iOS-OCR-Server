@@ -203,6 +203,11 @@ final class Settings {
         set { defaults.set(newValue, forKey: "keepAliveEnabled") }
     }
 
+    var keepAliveOwnSession: Bool {
+        get { boolean("keepAliveOwnSession", true) }
+        set { defaults.set(newValue, forKey: "keepAliveOwnSession") }
+    }
+
     var watchdogIntervalSeconds: Double {
         get { double("watchdogIntervalSeconds", 60) }
         set { defaults.set(newValue, forKey: "watchdogIntervalSeconds") }
