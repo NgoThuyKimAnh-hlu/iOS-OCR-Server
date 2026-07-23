@@ -74,6 +74,8 @@ struct BlackoutView: View {
         Color.black
             .ignoresSafeArea()
             .contentShape(Rectangle())
+            .statusBarHidden(true)
+            .persistentSystemOverlays(.hidden)
             .onTapGesture(count: 2) {
                 displayMode.exitBlackout()
             }
@@ -90,10 +92,11 @@ struct BlackoutView: View {
 extension View {
     @ViewBuilder
     func blackoutCovered(when isBlackout: Bool) -> some View {
-        overlay {
-            if isBlackout {
-                BlackoutView()
+        accessibilityHidden(isBlackout)
+            .overlay {
+                if isBlackout {
+                    BlackoutView()
+                }
             }
-        }
     }
 }
