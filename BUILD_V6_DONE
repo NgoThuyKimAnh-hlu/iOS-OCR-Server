@@ -1,0 +1,6 @@
+BUILD_V6_DONE
+Version: 1.6.0 (33)
+Scope: T1 thermal governor, T2 concurrency/gap, T3 DPI 150, T4 pass2 bboxes, T5 admin auth/limits
+Static verification: 39 Swift files, 4 inline scripts, 5 OCR resources, Python syntax, Xcode synchronized group
+Not verified: Xcode/Apple SDK build, IPA packaging, or physical iPhone thermal/OCR behavior
+GitHub push: not performed

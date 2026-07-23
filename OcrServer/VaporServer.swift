@@ -676,6 +676,8 @@ struct AdminSettingsResponse: Content, Sendable {
     let max_queue: Int
     let max_inflight: Int
     let fair_gap_ms: Int
+    let max_upload_mb: Int
+    let max_batch_files: Int
 }
 
 struct AdminSettingsPatch: Content, Sendable {
@@ -725,6 +727,8 @@ struct AdminSettingsPatch: Content, Sendable {
     let max_queue: Int?
     let max_inflight: Int?
     let fair_gap_ms: Int?
+    let max_upload_mb: Int?
+    let max_batch_files: Int?
 }
 
 struct AdminApplyResponse: Content, Sendable {
@@ -884,6 +888,8 @@ actor VaporServer {
         app.http.server.configuration.port = port
         app.http.server.configuration.reuseAddress = true
         app.middleware.use(RequestMetricsMiddleware(), at: .beginning)
+        app.middleware.use(AdminAuthMiddleware(), at: .end)
+        app.middleware.use(UploadLimitMiddleware(), at: .end)
         app.middleware.use(OCRAdmissionMiddleware(), at: .end)
         await ThermalGovernor.shared.startMonitoring()
 
@@ -1191,16 +1197,19 @@ actor VaporServer {
 
         app.on(.POST, "batch", "ocr", body: .collect(maxSize: "100mb")) { req async throws -> Response in
             try await Self.requireService(.batchOCR)
+            try await Self.requireUploadWithinLimit(req)
             return try await Self.fieldBatchResponse(request: req, mode: .ocr)
         }
 
         app.on(.POST, "batch", "markdown", body: .collect(maxSize: "100mb")) { req async throws -> Response in
             try await Self.requireService(.batchMarkdown)
+            try await Self.requireUploadWithinLimit(req)
             return try await Self.fieldBatchResponse(request: req, mode: .markdown)
         }
 
         app.on(.POST, "batch", "docx", body: .collect(maxSize: "100mb")) { req async throws -> Response in
             try await Self.requireService(.batchDocx)
+            try await Self.requireUploadWithinLimit(req)
             return try await Self.fieldBatchResponse(request: req, mode: .docx)
         }
 
@@ -1208,6 +1217,7 @@ actor VaporServer {
             try await Self.requireDebugEnabled()
             try await Self.requireAdminToken(request: req)
             try await Self.requireService(.ocr)
+            try await Self.requireUploadWithinLimit(req)
             guard let self else { throw Abort(.internalServerError) }
 
             let upload: OCRUploadPayload
@@ -1500,6 +1510,7 @@ actor VaporServer {
         // POST /upload
         app.on(.POST, "upload", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
             try await Self.requireService(.ocr)
+            try await Self.requireUploadWithinLimit(req)
             guard let self else { throw Abort(.internalServerError) }
 
             let upload: OCRUploadPayload
@@ -1750,6 +1761,7 @@ actor VaporServer {
         // POST /batch
         app.on(.POST, "batch", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
             try await Self.requireService(.ocr)
+            try await Self.requireUploadWithinLimit(req)
             guard let self else { throw Abort(.internalServerError) }
 
             let files: [ParsedMultipartFile]
@@ -1761,6 +1773,7 @@ actor VaporServer {
                     ComputeErrorResponse(success: false, message: error.localizedDescription)
                 )
             }
+            try await Self.requireBatchFileLimit(files.count)
 
             let runtime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
             let metadata = OCRDomainMetadata(
@@ -1820,6 +1833,7 @@ actor VaporServer {
         // POST /barcode
         app.on(.POST, "barcode", body: .collect(maxSize: "100mb")) { req async throws -> Response in
             try await Self.requireService(.barcode)
+            try await Self.requireUploadWithinLimit(req)
             struct BarcodeUpload: Content { var file: File }
 
             let upload: BarcodeUpload
@@ -2325,6 +2339,7 @@ actor VaporServer {
         // POST /docOCR
         app.on(.POST, "docOCR", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
             try await Self.requireService(.dococr)
+            try await Self.requireUploadWithinLimit(req)
             if #unavailable(iOS 26) {
                 return try Self.jsonResponse(
                     .ok,
@@ -2630,6 +2645,28 @@ actor VaporServer {
         }
     }
 
+    private static func requireUploadWithinLimit(_ request: Request) async throws {
+        guard let body = request.body.data else { return }
+        let maximumMB = await MainActor.run { Settings.shared.maximumUploadMegabytes }
+        let maximumBytes = maximumMB * 1_048_576
+        guard body.readableBytes <= maximumBytes else {
+            throw Abort(
+                .payloadTooLarge,
+                reason: "Upload body exceeds max_upload_mb (\(maximumMB) MB)"
+            )
+        }
+    }
+
+    private static func requireBatchFileLimit(_ count: Int) async throws {
+        let maximum = await MainActor.run { Settings.shared.maximumBatchFiles }
+        guard count <= maximum else {
+            throw Abort(
+                .badRequest,
+                reason: "Batch contains \(count) files; max_batch_files is \(maximum)"
+            )
+        }
+    }
+
     private static func fieldBatchResponse(
         request: Request,
         mode: FieldBatchMode
@@ -2643,6 +2680,7 @@ actor VaporServer {
                 ComputeErrorResponse(success: false, message: error.localizedDescription)
             )
         }
+        try await requireBatchFileLimit(files.count)
 
         let options: OCRRequestOptions
         do {
@@ -2876,7 +2914,9 @@ actor VaporServer {
             thermal_guard: settings.thermalGuard,
             max_queue: settings.maximumQueueDepth,
             max_inflight: settings.maximumOCRInflight,
-            fair_gap_ms: settings.fairGapMilliseconds
+            fair_gap_ms: settings.fairGapMilliseconds,
+            max_upload_mb: settings.maximumUploadMegabytes,
+            max_batch_files: settings.maximumBatchFiles
         )
     }
 
@@ -3124,6 +3164,16 @@ actor VaporServer {
                 settings.fairGapMilliseconds = $0
             }
         }
+        if let value = patch.max_upload_mb {
+            applyInteger(value, key: "max_upload_mb", range: 1...100, applied: &applied, rejected: &rejected) {
+                settings.maximumUploadMegabytes = $0
+            }
+        }
+        if let value = patch.max_batch_files {
+            applyInteger(value, key: "max_batch_files", range: 1...200, applied: &applied, rejected: &rejected) {
+                settings.maximumBatchFiles = $0
+            }
+        }
 
         if applied.isEmpty, rejected.isEmpty {
             rejected.append("No supported setting was provided")
@@ -3223,6 +3273,8 @@ actor VaporServer {
             item("max_queue", "int", 0, 100),
             item("max_inflight", "int", 1, 8),
             item("fair_gap_ms", "int", 0, 10_000),
+            item("max_upload_mb", "int", 1, 100),
+            item("max_batch_files", "int", 1, 200),
         ]
     }
 

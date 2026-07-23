@@ -233,6 +233,16 @@ final class Settings {
         set { defaults.set(newValue, forKey: "fairGapMilliseconds") }
     }
 
+    var maximumUploadMegabytes: Int {
+        get { integer("maximumUploadMegabytes", 60) }
+        set { defaults.set(newValue, forKey: "maximumUploadMegabytes") }
+    }
+
+    var maximumBatchFiles: Int {
+        get { integer("maximumBatchFiles", 50) }
+        set { defaults.set(newValue, forKey: "maximumBatchFiles") }
+    }
+
     var improveEnabled: Bool {
         get { boolean("improveEnabled", true) }
         set { defaults.set(newValue, forKey: "improveEnabled") }

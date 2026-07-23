@@ -74,8 +74,13 @@ actor ImageProcessingService {
         guard let document = PDFDocument(data: data), document.pageCount > 0 else {
             throw ImageProcessingError.invalidPDF
         }
+        guard document.pageCount <= maximumPages else {
+            throw ImageProcessingError.invalidPDFOptions(
+                "PDF has \(document.pageCount) pages; pdf_max_pages is \(maximumPages)"
+            )
+        }
 
-        let pageLimit = min(document.pageCount, maximumPages)
+        let pageLimit = document.pageCount
         let scale = CGFloat(dpi) / 72
         var renderedPages: [RenderedPDFPage] = []
         renderedPages.reserveCapacity(pageLimit)
