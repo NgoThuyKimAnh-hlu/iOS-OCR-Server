@@ -1,0 +1,4 @@
+Compute v4 implemented locally at version 1.5.0 (32).
+A/B/C/D each have a local commit; follow-up commits cover applied-word tracing and mobile QA.
+All 37 Swift files and four inline JavaScript blocks pass syntax checks.
+No GitHub push was performed. See BUILD_V4_codex.md for verified and open items.
