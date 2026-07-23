@@ -113,6 +113,7 @@ final class ServerTelemetry: ObservableObject {
     @Published private(set) var requestsOK = 0
     @Published private(set) var requestsFail = 0
     @Published private(set) var autoRestarts = 0
+    @Published private(set) var socketRebinds = 0
     @Published private(set) var ocrCorrectionsTotal = 0
     @Published private(set) var logs: [RequestLogEntry] = []
     @Published private(set) var serverStartedAt: Date?
@@ -160,6 +161,15 @@ final class ServerTelemetry: ObservableObject {
     func recordAutomaticRestart(reason: String) {
         autoRestarts += 1
         recordSystemEvent(method: "WATCHDOG", path: reason, status: 0)
+    }
+
+    func recordSocketRebind(reason: String) {
+        socketRebinds += 1
+        recordSystemEvent(
+            method: "REBIND",
+            path: "/network/\(reason)",
+            status: 202
+        )
     }
 
     func recordOCRCorrections(_ count: Int) {

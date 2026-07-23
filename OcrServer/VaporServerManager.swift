@@ -13,10 +13,14 @@ import Foundation
 @MainActor
 final class VaporServerManager: ObservableObject {
     private let server = VaporServer()
+    private let networkMonitor = NetworkMonitor.shared
     private var cancellables = Set<AnyCancellable>()
     private var lifecycleTask: Task<Void, Never>?
     private var watchdogTask: Task<Void, Never>?
+    private var networkRebindTask: Task<Void, Never>?
+    private var lastNetworkSnapshot: NetworkSnapshot?
     private var bonjourService: NetService?
+    private let networkRebindDebounceNanoseconds: UInt64 = 2_500_000_000
     
     @Published private(set) var port: Int = Settings.shared.httpPort
 
@@ -43,6 +47,11 @@ final class VaporServerManager: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        networkMonitor.start { [weak self] snapshot in
+            Task { @MainActor in
+                self?.handleNetworkPathUpdate(snapshot)
+            }
+        }
         startServer()
     }
     
@@ -62,6 +71,7 @@ final class VaporServerManager: ObservableObject {
             self.isRestarting = true
             self.watchdogTask?.cancel()
             self.watchdogTask = nil
+            self.cancelPendingNetworkRebind()
             self.stopBonjour()
             await self.server.stop()
             KeepAliveService.shared.stop()
@@ -132,6 +142,7 @@ final class VaporServerManager: ObservableObject {
 
     private func beginRestart(reason: String?, countAsAutomatic: Bool) {
         guard lifecycleTask == nil else { return }
+        cancelPendingNetworkRebind()
         if countAsAutomatic, let reason {
             ServerTelemetry.shared.recordAutomaticRestart(reason: reason)
         } else if let reason {
@@ -159,6 +170,56 @@ final class VaporServerManager: ObservableObject {
             await self.performStart()
             self.lifecycleTask = nil
         }
+    }
+
+    private func handleNetworkPathUpdate(_ snapshot: NetworkSnapshot) {
+        defer { lastNetworkSnapshot = snapshot }
+        refreshNetworkAddresses()
+
+        guard let previous = lastNetworkSnapshot else { return }
+        var reasons: [String] = []
+        if !previous.isSatisfied, snapshot.isSatisfied {
+            reasons.append("path-restored")
+        }
+        if previous.availableInterfaces != snapshot.availableInterfaces
+            || previous.interfaceIdentity != snapshot.interfaceIdentity {
+            reasons.append("interface-changed")
+        }
+        if previous.currentIP != snapshot.currentIP {
+            reasons.append("ip-changed")
+        }
+
+        guard snapshot.isSatisfied, !reasons.isEmpty else { return }
+        scheduleSocketRebind(reason: reasons.joined(separator: "+"))
+    }
+
+    private func scheduleSocketRebind(reason: String) {
+        guard isRunning, !isRestarting else { return }
+        networkRebindTask?.cancel()
+        networkRebindTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(nanoseconds: self.networkRebindDebounceNanoseconds)
+            } catch {
+                return
+            }
+
+            guard self.isRunning,
+                  !self.isRestarting,
+                  self.lifecycleTask == nil,
+                  self.networkMonitor.currentSnapshot().isSatisfied else {
+                self.networkRebindTask = nil
+                return
+            }
+            self.networkRebindTask = nil
+            ServerTelemetry.shared.recordSocketRebind(reason: reason)
+            self.beginRestart(reason: nil, countAsAutomatic: false)
+        }
+    }
+
+    private func cancelPendingNetworkRebind() {
+        networkRebindTask?.cancel()
+        networkRebindTask = nil
     }
 
     private func startUsingPortPolicy() async throws -> Int {
