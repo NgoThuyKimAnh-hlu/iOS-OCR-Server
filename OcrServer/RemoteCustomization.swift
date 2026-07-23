@@ -10,6 +10,10 @@ import Vapor
 enum ComputeServiceName: String, CaseIterable, Codable, Sendable {
     case ocr
     case dococr
+    case console
+    case batchOCR = "batch_ocr"
+    case batchMarkdown = "batch_markdown"
+    case batchDocx = "batch_docx"
     case translate
     case transcribe
     case synthesize

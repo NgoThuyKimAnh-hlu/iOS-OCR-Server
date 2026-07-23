@@ -19,6 +19,19 @@ No cloud dependencies, unlimited usage, complete privacy.
 
 - **OCR Test: On your computer, open a web browser and navigate to the IP address displayed by the app to perform an OCR test.**
 
+## Offline Field Console
+
+Open `http://<IPHONE-IP>:8000/console` from any browser on the same Wi-Fi or
+Personal Hotspot. The page accepts multiple images or PDFs and processes them
+sequentially to reduce heat. OCR and Markdown run fully on the iPhone without
+cloud access. Word `.docx` files and the final download ZIP are assembled in the
+client browser, so document packaging does not load the phone.
+
+The console uses `POST /batch/ocr`, `POST /batch/markdown`, and
+`POST /batch/docx`. Markdown and Word source generation require iOS 26 document
+recognition. Toggle `console`, `batch_ocr`, `batch_markdown`, and `batch_docx`
+independently through `POST /admin/services`; all four are enabled by default.
+
 ![image2](images/image2.png)
 
 - **API Example - Upload an image via `upload` API:**

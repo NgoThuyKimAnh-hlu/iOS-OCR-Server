@@ -337,6 +337,83 @@ struct BatchUploadResponse: Content {
     let ocr_boxes: [OCRBoxItem]
 }
 
+struct FieldBatchResult: Content, Sendable {
+    let filename: String
+    let success: Bool
+    let message: String
+    let completed: Int
+    let total: Int
+    let format: String
+    let text: String
+    let raw: String
+    let improved: String
+    let page_score: Double
+    let line_scores: [OCRLineScoreResponse]
+    let flags: [String]
+    let needs_pass2: Bool
+    let mean_confidence: Double
+    let corrections_applied: Int
+    let build_version: String
+    let schema_version: Int
+
+    init(
+        filename: String,
+        completed: Int,
+        total: Int,
+        format: String,
+        results: [OCRImprovementResult],
+        pageSeparator: String
+    ) {
+        self.filename = filename
+        self.success = !results.isEmpty
+        self.message = results.isEmpty ? "OCR failed" : "OCR completed successfully"
+        self.completed = completed
+        self.total = total
+        self.format = format
+        self.text = results.map(\.selectedText).joined(separator: pageSeparator)
+        self.raw = results.map(\.raw).joined(separator: "\n\n")
+        self.improved = results.map(\.improved).joined(separator: "\n\n")
+        self.page_score = results.map(\.pageScore).min() ?? 0
+        self.line_scores = results.flatMap(\.lineScores)
+        self.flags = Array(Set(results.flatMap(\.flags))).sorted()
+        self.needs_pass2 = results.isEmpty || results.contains { $0.needsPass2 }
+        self.mean_confidence = Self.mean(results.map(\.meanConfidence))
+        self.corrections_applied = results.reduce(0) { $0 + $1.correctionsApplied }
+        self.build_version = BuildInfo.versionStamp
+        self.schema_version = OCRContract.schemaVersion
+    }
+
+    init(
+        filename: String,
+        completed: Int,
+        total: Int,
+        format: String,
+        error: Error
+    ) {
+        self.filename = filename
+        self.success = false
+        self.message = error.localizedDescription
+        self.completed = completed
+        self.total = total
+        self.format = format
+        self.text = ""
+        self.raw = ""
+        self.improved = ""
+        self.page_score = 0
+        self.line_scores = []
+        self.flags = ["ocr_failed"]
+        self.needs_pass2 = true
+        self.mean_confidence = 0
+        self.corrections_applied = 0
+        self.build_version = BuildInfo.versionStamp
+        self.schema_version = OCRContract.schemaVersion
+    }
+
+    private static func mean(_ values: [Double]) -> Double {
+        values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count)
+    }
+}
+
 struct BarcodeItemResponse: Content {
     let payload: String
     let symbology: String
@@ -573,6 +650,10 @@ struct AdminPackRequest: Content, Sendable {
 struct AdminServicesPatch: Content, Sendable {
     let ocr: Bool?
     let dococr: Bool?
+    let console: Bool?
+    let batch_ocr: Bool?
+    let batch_markdown: Bool?
+    let batch_docx: Bool?
     let translate: Bool?
     let transcribe: Bool?
     let synthesize: Bool?
@@ -612,6 +693,38 @@ private struct OCRUploadPayload: Content {
     var co_quan: String?
     var nam: String?
     var pack: String?
+}
+
+private enum FieldBatchMode: Equatable {
+    case ocr
+    case markdown
+    case docx
+
+    var responseFormat: String {
+        switch self {
+        case .ocr: return "ocr"
+        case .markdown: return "markdown"
+        case .docx: return "docx-source"
+        }
+    }
+
+    var pageSeparator: String {
+        self == .markdown ? "\n\n---\n\n" : "\n\n"
+    }
+}
+
+private enum FieldBatchError: LocalizedError {
+    case documentRecognitionUnavailable
+    case recognitionFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .documentRecognitionUnavailable:
+            return "Markdown and Word batch require iOS 26 document recognition"
+        case .recognitionFailed:
+            return "OCR failed"
+        }
+    }
 }
 
 actor VaporServer {
@@ -944,6 +1057,27 @@ actor VaporServer {
             return try Self.jsonResponse(.ok, response)
         }
 
+        app.get("console") { [weak self] req async throws -> Response in
+            try await Self.requireService(.console)
+            guard let self else { throw Abort(.internalServerError) }
+            return Self.htmlResponse(FieldConsole.html(port: await self.port))
+        }
+
+        app.on(.POST, "batch", "ocr", body: .collect(maxSize: "100mb")) { req async throws -> Response in
+            try await Self.requireService(.batchOCR)
+            return try await Self.fieldBatchResponse(request: req, mode: .ocr)
+        }
+
+        app.on(.POST, "batch", "markdown", body: .collect(maxSize: "100mb")) { req async throws -> Response in
+            try await Self.requireService(.batchMarkdown)
+            return try await Self.fieldBatchResponse(request: req, mode: .markdown)
+        }
+
+        app.on(.POST, "batch", "docx", body: .collect(maxSize: "100mb")) { req async throws -> Response in
+            try await Self.requireService(.batchDocx)
+            return try await Self.fieldBatchResponse(request: req, mode: .docx)
+        }
+
         app.on(.POST, "debug", "ocr", body: .collect(maxSize: "100mb")) { [weak self] req async throws -> Response in
             try await Self.requireDebugEnabled()
             try await Self.requireAdminToken(request: req)
@@ -1183,6 +1317,8 @@ actor VaporServer {
                 <p><code>GET /health</code> returns live server health. <code>GET /stats</code>
                 adds the latest 20 request-log entries.</p>
                 <p>Remote control: <a href="/admin"><code>GET /admin</code></a>.</p>
+                <p>Offline field appliance: <a href="/console"><code>GET /console</code></a>
+                for sequential OCR, Markdown, and client-side Word batches.</p>
                 <h3>OCR a PDF or rectify a photographed scan:</h3>
                 <pre><code>curl -H "Accept: application/json" \\
               -X POST 'http://&lt;YOUR IP&gt;:\(port)/upload?dpi=200&amp;max_pages=50&amp;rectify=1' \\
@@ -2356,6 +2492,182 @@ actor VaporServer {
         }
     }
 
+    private static func fieldBatchResponse(
+        request: Request,
+        mode: FieldBatchMode
+    ) async throws -> Response {
+        let files: [ParsedMultipartFile]
+        do {
+            files = try MultipartUploadParser.files(from: request, fieldName: "file")
+        } catch {
+            return try jsonResponse(
+                .badRequest,
+                ComputeErrorResponse(success: false, message: error.localizedDescription)
+            )
+        }
+
+        let options: OCRRequestOptions
+        do {
+            options = try requestOptions(from: request)
+        } catch {
+            return try jsonResponse(
+                .badRequest,
+                ComputeErrorResponse(success: false, message: error.localizedDescription)
+            )
+        }
+
+        let baseRuntime = await MainActor.run { Settings.shared.ocrRuntimeSnapshot() }
+        let runtime: OCRRuntimeSettingsSnapshot
+        do {
+            runtime = try runtimeSettings(options: options, base: baseRuntime)
+        } catch {
+            return try jsonResponse(
+                .badRequest,
+                ComputeErrorResponse(success: false, message: error.localizedDescription)
+            )
+        }
+        let improve = improveRequested(options: options, runtime: runtime)
+        let metadata = OCRDomainMetadata(
+            documentType: options.loai_van_ban,
+            agency: options.co_quan,
+            year: options.nam,
+            requestedPack: options.pack ?? runtime.activePack
+        )
+        let pack: DomainPackSelection
+        do {
+            pack = try await OCRImprovementService.shared.resolvePack(metadata: metadata)
+        } catch {
+            return try jsonResponse(
+                ocrErrorStatus(error),
+                ComputeErrorResponse(success: false, message: error.localizedDescription)
+            )
+        }
+
+        let rectify = booleanValue(options.rectify) ?? runtime.rectifyDefault
+        var responses: [FieldBatchResult] = []
+        responses.reserveCapacity(files.count)
+        for (index, file) in files.enumerated() {
+            do {
+                let results = try await processFieldBatchFile(
+                    file,
+                    mode: mode,
+                    runtime: runtime,
+                    metadata: metadata,
+                    pack: pack,
+                    improve: improve,
+                    rectify: rectify,
+                    dpi: options.dpi ?? runtime.pdfDPI,
+                    maximumPages: options.max_pages ?? runtime.pdfMaximumPages
+                )
+                responses.append(
+                    FieldBatchResult(
+                        filename: file.filename,
+                        completed: index + 1,
+                        total: files.count,
+                        format: mode.responseFormat,
+                        results: results,
+                        pageSeparator: mode.pageSeparator
+                    )
+                )
+            } catch {
+                responses.append(
+                    FieldBatchResult(
+                        filename: file.filename,
+                        completed: index + 1,
+                        total: files.count,
+                        format: mode.responseFormat,
+                        error: error
+                    )
+                )
+            }
+        }
+        return try jsonResponse(.ok, responses)
+    }
+
+    private static func processFieldBatchFile(
+        _ file: ParsedMultipartFile,
+        mode: FieldBatchMode,
+        runtime: OCRRuntimeSettingsSnapshot,
+        metadata: OCRDomainMetadata,
+        pack: DomainPackSelection,
+        improve: Bool,
+        rectify: Bool,
+        dpi: Int,
+        maximumPages: Int
+    ) async throws -> [OCRImprovementResult] {
+        let pages: [RenderedPDFPage]
+        let pageCount: Int?
+        if isPDF(file.data) {
+            let rendered = try await ImageProcessingService.shared.renderPDF(
+                data: file.data,
+                dpi: dpi,
+                maximumPages: maximumPages
+            )
+            pages = rendered.pages
+            pageCount = rendered.totalPageCount
+        } else {
+            pages = [RenderedPDFPage(pageNumber: 1, imageData: file.data)]
+            pageCount = nil
+        }
+
+        var results: [OCRImprovementResult] = []
+        results.reserveCapacity(pages.count)
+        for page in pages {
+            let processed: RectifiedImage
+            if rectify {
+                processed = await ImageProcessingService.shared.rectify(data: page.imageData)
+            } else {
+                processed = RectifiedImage(data: page.imageData, rectified: false)
+            }
+
+            let result: OCRImprovementResult?
+            switch mode {
+            case .ocr:
+                result = try await OCRImprovementService.shared.processImage(
+                    data: processed.data,
+                    visionConfiguration: runtime.visionConfiguration,
+                    metadata: metadata,
+                    improve: improve,
+                    pageNumber: pageCount == nil ? nil : page.pageNumber,
+                    pageCount: pageCount,
+                    configuration: runtime.improvementConfiguration,
+                    collectTrace: false,
+                    resolvedPack: pack
+                )
+            case .markdown, .docx:
+                if #available(iOS 26, *) {
+                    let recognizer = DocRecognizer(
+                        usesLanguageCorrection: runtime.usesLanguageCorrection,
+                        automaticallyDetectsLanguage: runtime.automaticallyDetectsLanguage,
+                        recognitionLanguages: runtime.recognitionLanguages,
+                        minimumTextHeight: runtime.minimumTextHeight,
+                        customWords: pack.words
+                    )
+                    let documentText = await recognizer.recognizeParagraphText(
+                        from: processed.data
+                    )
+                    result = try await OCRImprovementService.shared.processDocument(
+                        data: processed.data,
+                        documentText: documentText,
+                        visionConfiguration: runtime.visionConfiguration,
+                        metadata: metadata,
+                        improve: improve,
+                        pageNumber: pageCount == nil ? nil : page.pageNumber,
+                        pageCount: pageCount,
+                        configuration: runtime.improvementConfiguration,
+                        collectTrace: false,
+                        resolvedPack: pack
+                    )
+                } else {
+                    throw FieldBatchError.documentRecognitionUnavailable
+                }
+            }
+            guard let result else { throw FieldBatchError.recognitionFailed }
+            results.append(result)
+        }
+        return results
+    }
+
     private static func appliedCustomWordsCount() async throws -> Int {
         let activePack = await MainActor.run { Settings.shared.activePack }
         let pack = try await OCRImprovementService.shared.resolvePack(
@@ -2648,7 +2960,9 @@ actor VaporServer {
     @MainActor
     private static func applyServices(_ patch: AdminServicesPatch) -> AdminServicesResponse {
         let values: [(ComputeServiceName, Bool?)] = [
-            (.ocr, patch.ocr), (.dococr, patch.dococr), (.translate, patch.translate),
+            (.ocr, patch.ocr), (.dococr, patch.dococr), (.console, patch.console),
+            (.batchOCR, patch.batch_ocr), (.batchMarkdown, patch.batch_markdown),
+            (.batchDocx, patch.batch_docx), (.translate, patch.translate),
             (.transcribe, patch.transcribe), (.synthesize, patch.synthesize),
             (.llm, patch.llm), (.ner, patch.ner), (.embed, patch.embed),
             (.coreml, patch.coreml), (.barcode, patch.barcode),
