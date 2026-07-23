@@ -631,6 +631,8 @@ struct AdminSettingsResponse: Content, Sendable {
     let admin_token_configured: Bool
     let thermal_guard: Bool
     let max_queue: Int
+    let max_inflight: Int
+    let fair_gap_ms: Int
 }
 
 struct AdminSettingsPatch: Content, Sendable {
@@ -676,6 +678,8 @@ struct AdminSettingsPatch: Content, Sendable {
     let admin_token: String?
     let thermal_guard: Bool?
     let max_queue: Int?
+    let max_inflight: Int?
+    let fair_gap_ms: Int?
 }
 
 struct AdminApplyResponse: Content, Sendable {
@@ -2806,7 +2810,9 @@ actor VaporServer {
             admin_token_configured: !settings.adminToken
                 .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             thermal_guard: settings.thermalGuard,
-            max_queue: settings.maximumQueueDepth
+            max_queue: settings.maximumQueueDepth,
+            max_inflight: settings.maximumOCRInflight,
+            fair_gap_ms: settings.fairGapMilliseconds
         )
     }
 
@@ -3030,8 +3036,18 @@ actor VaporServer {
             applied.append("thermal_guard")
         }
         if let value = patch.max_queue {
-            applyInteger(value, key: "max_queue", range: 1...100, applied: &applied, rejected: &rejected) {
+            applyInteger(value, key: "max_queue", range: 0...100, applied: &applied, rejected: &rejected) {
                 settings.maximumQueueDepth = $0
+            }
+        }
+        if let value = patch.max_inflight {
+            applyInteger(value, key: "max_inflight", range: 1...8, applied: &applied, rejected: &rejected) {
+                settings.maximumOCRInflight = $0
+            }
+        }
+        if let value = patch.fair_gap_ms {
+            applyInteger(value, key: "fair_gap_ms", range: 0...10_000, applied: &applied, rejected: &rejected) {
+                settings.fairGapMilliseconds = $0
             }
         }
 
@@ -3128,7 +3144,9 @@ actor VaporServer {
             item("debug_verbose", "bool"),
             item("admin_token", "string", 0, 512, secret: true),
             item("thermal_guard", "bool"),
-            item("max_queue", "int", 1, 100),
+            item("max_queue", "int", 0, 100),
+            item("max_inflight", "int", 1, 8),
+            item("fair_gap_ms", "int", 0, 10_000),
         ]
     }
 

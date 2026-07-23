@@ -218,6 +218,16 @@ final class Settings {
         set { defaults.set(newValue, forKey: "maximumQueueDepth") }
     }
 
+    var maximumOCRInflight: Int {
+        get { integer("maximumOCRInflight", 2) }
+        set { defaults.set(newValue, forKey: "maximumOCRInflight") }
+    }
+
+    var fairGapMilliseconds: Int {
+        get { integer("fairGapMilliseconds", 300) }
+        set { defaults.set(newValue, forKey: "fairGapMilliseconds") }
+    }
+
     var improveEnabled: Bool {
         get { boolean("improveEnabled", true) }
         set { defaults.set(newValue, forKey: "improveEnabled") }
