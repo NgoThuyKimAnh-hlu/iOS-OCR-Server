@@ -208,6 +208,16 @@ final class Settings {
         set { defaults.set(newValue, forKey: "adminToken") }
     }
 
+    var thermalGuard: Bool {
+        get { boolean("thermalGuard", true) }
+        set { defaults.set(newValue, forKey: "thermalGuard") }
+    }
+
+    var maximumQueueDepth: Int {
+        get { integer("maximumQueueDepth", 8) }
+        set { defaults.set(newValue, forKey: "maximumQueueDepth") }
+    }
+
     var improveEnabled: Bool {
         get { boolean("improveEnabled", true) }
         set { defaults.set(newValue, forKey: "improveEnabled") }

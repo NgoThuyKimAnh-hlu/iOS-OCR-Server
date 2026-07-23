@@ -35,6 +35,7 @@ struct OCRDebugTiming: Content, Sendable {
 
 struct OCRDebugDeviceSnapshot: Content, Sendable {
     let thermal: String
+    let thermal_throttling: Bool
     let mem_free_mb: Int
     let battery: ServerBatteryStatus
 }

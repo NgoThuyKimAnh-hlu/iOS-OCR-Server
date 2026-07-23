@@ -59,6 +59,8 @@ struct DocOCRResult: Content {
     let pack_hash: String
     let build_version: String
     let schema_version: Int
+    let thermal_throttling: Bool
+    let thermal: String
 
     init(
         success: Bool,
@@ -85,6 +87,9 @@ struct DocOCRResult: Content {
         self.pack_hash = improvement?.pack.hash ?? ""
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        let thermalStatus = ThermalStatus.current()
+        self.thermal_throttling = thermalStatus.thermalThrottling
+        self.thermal = thermalStatus.thermal
     }
 }
 
@@ -110,6 +115,8 @@ struct UploadResponse: Content {
     let pack_hash: String
     let build_version: String
     let schema_version: Int
+    let thermal_throttling: Bool
+    let thermal: String
 
     init(
         success: Bool,
@@ -142,6 +149,9 @@ struct UploadResponse: Content {
         self.pack_hash = improvement?.pack.hash ?? ""
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        let thermalStatus = ThermalStatus.current()
+        self.thermal_throttling = thermalStatus.thermalThrottling
+        self.thermal = thermalStatus.thermal
     }
 }
 
@@ -168,6 +178,8 @@ struct PDFUploadPageResponse: Content {
     let pack_hash: String
     let build_version: String
     let schema_version: Int
+    let thermal_throttling: Bool
+    let thermal: String
 
     init(
         page: Int,
@@ -198,6 +210,9 @@ struct PDFUploadPageResponse: Content {
         self.pack_hash = improvement?.pack.hash ?? ""
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        let thermalStatus = ThermalStatus.current()
+        self.thermal_throttling = thermalStatus.thermalThrottling
+        self.thermal = thermalStatus.thermal
     }
 }
 
@@ -216,6 +231,8 @@ struct PDFUploadResponse: Content {
     let corrections_applied: Int
     let build_version: String
     let schema_version: Int
+    let thermal_throttling: Bool
+    let thermal: String
 
     init(success: Bool, message: String, pages: [PDFUploadPageResponse]) {
         self.success = success
@@ -232,6 +249,9 @@ struct PDFUploadResponse: Content {
         self.corrections_applied = pages.reduce(0) { $0 + $1.corrections_applied }
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        let thermalStatus = ThermalStatus.current()
+        self.thermal_throttling = thermalStatus.thermalThrottling
+        self.thermal = thermalStatus.thermal
     }
 
     private static func mean(_ values: [Double]) -> Double {
@@ -259,6 +279,8 @@ struct PDFDocOCRPageResponse: Content {
     let pack_hash: String
     let build_version: String
     let schema_version: Int
+    let thermal_throttling: Bool
+    let thermal: String
 
     init(
         page: Int,
@@ -286,6 +308,9 @@ struct PDFDocOCRPageResponse: Content {
         self.pack_hash = improvement?.pack.hash ?? ""
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        let thermalStatus = ThermalStatus.current()
+        self.thermal_throttling = thermalStatus.thermalThrottling
+        self.thermal = thermalStatus.thermal
     }
 }
 
@@ -304,6 +329,8 @@ struct PDFDocOCRResponse: Content {
     let corrections_applied: Int
     let build_version: String
     let schema_version: Int
+    let thermal_throttling: Bool
+    let thermal: String
 
     init(success: Bool, message: String, pages: [PDFDocOCRPageResponse]) {
         self.success = success
@@ -320,6 +347,9 @@ struct PDFDocOCRResponse: Content {
         self.corrections_applied = pages.reduce(0) { $0 + $1.corrections_applied }
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        let thermalStatus = ThermalStatus.current()
+        self.thermal_throttling = thermalStatus.thermalThrottling
+        self.thermal = thermalStatus.thermal
     }
 
     private static func mean(_ values: [Double]) -> Double {
@@ -335,6 +365,29 @@ struct BatchUploadResponse: Content {
     let image_width: Int
     let image_height: Int
     let ocr_boxes: [OCRBoxItem]
+    let thermal_throttling: Bool
+    let thermal: String
+
+    init(
+        filename: String,
+        success: Bool,
+        message: String,
+        ocr_result: String,
+        image_width: Int,
+        image_height: Int,
+        ocr_boxes: [OCRBoxItem]
+    ) {
+        self.filename = filename
+        self.success = success
+        self.message = message
+        self.ocr_result = ocr_result
+        self.image_width = image_width
+        self.image_height = image_height
+        self.ocr_boxes = ocr_boxes
+        let thermalStatus = ThermalStatus.current()
+        self.thermal_throttling = thermalStatus.thermalThrottling
+        self.thermal = thermalStatus.thermal
+    }
 }
 
 struct FieldBatchResult: Content, Sendable {
@@ -355,6 +408,8 @@ struct FieldBatchResult: Content, Sendable {
     let corrections_applied: Int
     let build_version: String
     let schema_version: Int
+    let thermal_throttling: Bool
+    let thermal: String
 
     init(
         filename: String,
@@ -381,6 +436,9 @@ struct FieldBatchResult: Content, Sendable {
         self.corrections_applied = results.reduce(0) { $0 + $1.correctionsApplied }
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        let thermalStatus = ThermalStatus.current()
+        self.thermal_throttling = thermalStatus.thermalThrottling
+        self.thermal = thermalStatus.thermal
     }
 
     init(
@@ -407,6 +465,9 @@ struct FieldBatchResult: Content, Sendable {
         self.corrections_applied = 0
         self.build_version = BuildInfo.versionStamp
         self.schema_version = OCRContract.schemaVersion
+        let thermalStatus = ThermalStatus.current()
+        self.thermal_throttling = thermalStatus.thermalThrottling
+        self.thermal = thermalStatus.thermal
     }
 
     private static func mean(_ values: [Double]) -> Double {
@@ -568,6 +629,8 @@ struct AdminSettingsResponse: Content, Sendable {
     let debug_verbose: Bool
     let admin_token: String
     let admin_token_configured: Bool
+    let thermal_guard: Bool
+    let max_queue: Int
 }
 
 struct AdminSettingsPatch: Content, Sendable {
@@ -611,6 +674,8 @@ struct AdminSettingsPatch: Content, Sendable {
     let watchdog_interval_s: Double?
     let debug_verbose: Bool?
     let admin_token: String?
+    let thermal_guard: Bool?
+    let max_queue: Int?
 }
 
 struct AdminApplyResponse: Content, Sendable {
@@ -770,6 +835,8 @@ actor VaporServer {
         app.http.server.configuration.port = port
         app.http.server.configuration.reuseAddress = true
         app.middleware.use(RequestMetricsMiddleware(), at: .beginning)
+        app.middleware.use(OCRAdmissionMiddleware(), at: .end)
+        await ThermalGovernor.shared.startMonitoring()
 
         try routes(app)
 
@@ -853,12 +920,17 @@ actor VaporServer {
             let port = await self.port
             let customization = try await OCRCustomizationStore.shared.summary()
             let customWordsCount = try await Self.appliedCustomWordsCount()
+            let thermalGuard = await MainActor.run { Settings.shared.thermalGuard }
+            let thermalStatus = await ThermalGovernor.shared.snapshot(
+                guardEnabled: thermalGuard
+            )
             let health = await MainActor.run {
                 ServerTelemetry.shared.healthResponse(
                     port: port,
                     keepAlive: KeepAliveService.shared.isActive,
                     customization: customization,
-                    customWordsCount: customWordsCount
+                    customWordsCount: customWordsCount,
+                    thermalStatus: thermalStatus
                 )
             }
             return try Self.jsonResponse(.ok, health)
@@ -869,12 +941,17 @@ actor VaporServer {
             let port = await self.port
             let customization = try await OCRCustomizationStore.shared.summary()
             let customWordsCount = try await Self.appliedCustomWordsCount()
+            let thermalGuard = await MainActor.run { Settings.shared.thermalGuard }
+            let thermalStatus = await ThermalGovernor.shared.snapshot(
+                guardEnabled: thermalGuard
+            )
             let stats = await MainActor.run {
                 ServerTelemetry.shared.statsResponse(
                     port: port,
                     keepAlive: KeepAliveService.shared.isActive,
                     customization: customization,
-                    customWordsCount: customWordsCount
+                    customWordsCount: customWordsCount,
+                    thermalStatus: thermalStatus
                 )
             }
             return try Self.jsonResponse(.ok, stats)
@@ -2727,7 +2804,9 @@ actor VaporServer {
             debug_verbose: settings.debugVerbose,
             admin_token: settings.adminToken,
             admin_token_configured: !settings.adminToken
-                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            thermal_guard: settings.thermalGuard,
+            max_queue: settings.maximumQueueDepth
         )
     }
 
@@ -2946,6 +3025,15 @@ actor VaporServer {
                 rejected.append("admin_token: maximum length is 512")
             }
         }
+        if let value = patch.thermal_guard {
+            settings.thermalGuard = value
+            applied.append("thermal_guard")
+        }
+        if let value = patch.max_queue {
+            applyInteger(value, key: "max_queue", range: 1...100, applied: &applied, rejected: &rejected) {
+                settings.maximumQueueDepth = $0
+            }
+        }
 
         if applied.isEmpty, rejected.isEmpty {
             rejected.append("No supported setting was provided")
@@ -3039,6 +3127,8 @@ actor VaporServer {
             item("watchdog_interval_s", "double", 10, 3600),
             item("debug_verbose", "bool"),
             item("admin_token", "string", 0, 512, secret: true),
+            item("thermal_guard", "bool"),
+            item("max_queue", "int", 1, 100),
         ]
     }
 

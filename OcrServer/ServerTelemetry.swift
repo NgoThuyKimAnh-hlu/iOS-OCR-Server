@@ -72,6 +72,7 @@ struct ServerHealthResponse: Content, Sendable {
     let keep_alive: Bool
     let battery: ServerBatteryStatus
     let thermal: String
+    let thermal_throttling: Bool
     let mem_free_mb: Int
     let ocr_improve: OCRImproveHealthStatus
 }
@@ -89,6 +90,7 @@ struct ServerStatsResponse: Content, Sendable {
     let keep_alive: Bool
     let battery: ServerBatteryStatus
     let thermal: String
+    let thermal_throttling: Bool
     let mem_free_mb: Int
     let ocr_improve: OCRImproveHealthStatus
     let logs: [RequestLogEntry]
@@ -163,7 +165,8 @@ final class ServerTelemetry: ObservableObject {
         port: Int,
         keepAlive: Bool,
         customization: OCRCustomizationSummary,
-        customWordsCount: Int
+        customWordsCount: Int,
+        thermalStatus: ThermalStatusSnapshot
     ) -> ServerHealthResponse {
         let device = UIDevice.current
         let level = device.batteryLevel >= 0
@@ -186,7 +189,8 @@ final class ServerTelemetry: ObservableObject {
                 level: level,
                 state: Self.batteryStateName(device.batteryState)
             ),
-            thermal: Self.thermalStateName(ProcessInfo.processInfo.thermalState),
+            thermal: thermalStatus.thermal,
+            thermal_throttling: thermalStatus.thermalThrottling,
             mem_free_mb: Self.freeMemoryMegabytes(),
             ocr_improve: OCRImproveHealthStatus(
                 enabled: Settings.shared.improveEnabled,
@@ -210,13 +214,15 @@ final class ServerTelemetry: ObservableObject {
         port: Int,
         keepAlive: Bool,
         customization: OCRCustomizationSummary,
-        customWordsCount: Int
+        customWordsCount: Int,
+        thermalStatus: ThermalStatusSnapshot
     ) -> ServerStatsResponse {
         let health = healthResponse(
             port: port,
             keepAlive: keepAlive,
             customization: customization,
-            customWordsCount: customWordsCount
+            customWordsCount: customWordsCount,
+            thermalStatus: thermalStatus
         )
         return ServerStatsResponse(
             status: health.status,
@@ -231,6 +237,7 @@ final class ServerTelemetry: ObservableObject {
             keep_alive: health.keep_alive,
             battery: health.battery,
             thermal: health.thermal,
+            thermal_throttling: health.thermal_throttling,
             mem_free_mb: health.mem_free_mb,
             ocr_improve: health.ocr_improve,
             logs: recentLogs(limit: 20)
@@ -239,11 +246,13 @@ final class ServerTelemetry: ObservableObject {
 
     func debugDeviceSnapshot() -> OCRDebugDeviceSnapshot {
         let device = UIDevice.current
+        let thermalStatus = ThermalStatus.current()
         let level = device.batteryLevel >= 0
             ? Int((device.batteryLevel * 100).rounded())
             : nil
         return OCRDebugDeviceSnapshot(
-            thermal: Self.thermalStateName(ProcessInfo.processInfo.thermalState),
+            thermal: thermalStatus.thermal,
+            thermal_throttling: thermalStatus.thermalThrottling,
             mem_free_mb: Self.freeMemoryMegabytes(),
             battery: ServerBatteryStatus(
                 level: level,
@@ -269,21 +278,6 @@ final class ServerTelemetry: ObservableObject {
             return "full"
         case .unknown:
             return "unknown"
-        @unknown default:
-            return "unknown"
-        }
-    }
-
-    private static func thermalStateName(_ state: ProcessInfo.ThermalState) -> String {
-        switch state {
-        case .nominal:
-            return "nominal"
-        case .fair:
-            return "fair"
-        case .serious:
-            return "serious"
-        case .critical:
-            return "critical"
         @unknown default:
             return "unknown"
         }
