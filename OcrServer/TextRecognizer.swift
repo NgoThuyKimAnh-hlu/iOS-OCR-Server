@@ -54,6 +54,7 @@ struct OCRVisionOutput: Sendable {
     let imageHeight: Int
     var lines: [OCRVisionLine]
     let visionMilliseconds: Double
+    let customWordsCount: Int
 
     var text: String {
         lines.map(\.text).joined(separator: "\n")
@@ -126,6 +127,7 @@ final class TextRecognizer {
         if !customWords.isEmpty {
             request.customWords = customWords
         }
+        let customWordsCount = request.customWords.count
 
         let started = DispatchTime.now().uptimeNanoseconds
         let observations = (try? await request.perform(on: data)) ?? []
@@ -229,7 +231,8 @@ final class TextRecognizer {
             imageWidth: width,
             imageHeight: height,
             lines: lines,
-            visionMilliseconds: visionMilliseconds
+            visionMilliseconds: visionMilliseconds,
+            customWordsCount: customWordsCount
         )
     }
 

@@ -104,6 +104,7 @@ struct OCRImprovementResult: Sendable {
     let correctMilliseconds: Double
     let totalMilliseconds: Double
     let pack: DomainPackSelection
+    let customWordsCount: Int
     let rawVisionLines: [OCRVisionLine]
     let visionLines: [OCRVisionLine]
     let correctionTrace: [OCRCorrectionTraceItem]
@@ -607,6 +608,7 @@ actor OCRImprovementService {
             correctMilliseconds: correctMilliseconds,
             totalMilliseconds: Self.elapsedMilliseconds(since: pipelineStarted),
             pack: pack,
+            customWordsCount: initial.customWordsCount,
             rawVisionLines: initial.lines,
             visionLines: selectedVision.lines,
             correctionTrace: correctionTrace

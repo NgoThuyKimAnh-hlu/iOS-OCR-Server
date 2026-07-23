@@ -160,7 +160,7 @@ enum OCRDebugTraceFactory {
                 pack_id: result.pack.id,
                 pack_version: result.pack.version,
                 pack_hash: result.pack.hash,
-                customwords_count: result.pack.words.count,
+                customwords_count: result.customWordsCount,
                 confidence_threshold: runtime.confidenceThreshold,
                 recognition_languages: runtime.recognitionLanguages,
                 recognition_level: recognitionLevel,
