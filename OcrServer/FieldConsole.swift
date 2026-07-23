@@ -20,6 +20,7 @@ enum FieldConsole {
               --signal:#b7f36b; --amber:#ffba5c; --danger:#ff756d; --black:#07100d;
             }
             * { box-sizing:border-box; }
+            html,body { max-width:100%; overflow-x:hidden; }
             body {
               margin:0; min-height:100vh; color:var(--ink); background:
                 radial-gradient(circle at 12% 6%,#28402d 0,transparent 34%),
@@ -37,12 +38,12 @@ enum FieldConsole {
             .eyebrow { color:var(--signal); font-size:12px; letter-spacing:.2em; text-transform:uppercase; }
             h1 { margin:7px 0 0; max-width:680px; font-size:clamp(38px,8vw,78px); line-height:.88; font-weight:500; letter-spacing:-.055em; }
             .node { text-align:right; color:var(--muted); font-size:12px; line-height:1.7; }
-            .grid { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(280px,.7fr); gap:16px; }
-            .card { background:linear-gradient(145deg,#14221d,#0b1411); border:1px solid var(--line); border-radius:22px; padding:20px; box-shadow:0 22px 70px #0007; }
+            .grid { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(280px,.7fr); gap:16px; min-width:0; }
+            .card { min-width:0; max-width:100%; background:linear-gradient(145deg,#14221d,#0b1411); border:1px solid var(--line); border-radius:22px; padding:20px; box-shadow:0 22px 70px #0007; }
             .drop { min-height:265px; display:grid; place-items:center; text-align:center; border:1px dashed #52705c; border-radius:16px; padding:28px; cursor:pointer; transition:.18s ease; }
             .drop.hot { border-color:var(--signal); background:#b7f36b0c; transform:translateY(-2px); }
             .drop strong { display:block; font-size:29px; font-weight:500; }
-            .drop span { display:block; color:var(--muted); margin-top:9px; line-height:1.5; }
+            .drop span { display:block; max-width:100%; color:var(--muted); margin-top:9px; line-height:1.5; overflow-wrap:anywhere; }
             input[type=file] { display:none; }
             label { display:block; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.12em; margin-bottom:8px; }
             select,button { width:100%; color:var(--ink); border:1px solid var(--line); border-radius:12px; background:#07110d; padding:13px 14px; font:600 14px "SFMono-Regular",Consolas,monospace; }
@@ -58,7 +59,17 @@ enum FieldConsole {
             .result { border-color:#3c5545; }
             .result.bad { border-color:#713c39; color:#ffd6d2; }
             footer { margin-top:18px; color:var(--muted); font:12px/1.6 "SFMono-Regular",Consolas,monospace; }
-            @media (max-width:760px) { header { align-items:start; flex-direction:column; } .node { text-align:left; } .grid { grid-template-columns:1fr; } }
+            @media (max-width:760px) {
+              main { width:100%; padding:24px 14px 48px; }
+              header { align-items:start; flex-direction:column; min-width:0; }
+              h1 { max-width:100%; font-size:clamp(34px,12vw,52px); line-height:.92; overflow-wrap:anywhere; }
+              .node { width:100%; text-align:left; }
+              .grid { width:100%; grid-template-columns:minmax(0,1fr); }
+              .grid > * { width:100%; min-width:0; }
+              .card { padding:16px; }
+              .drop { min-width:0; padding:22px 12px; }
+              select,button { min-width:0; }
+            }
           </style>
         </head>
         <body><main>
