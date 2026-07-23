@@ -13,12 +13,14 @@ final class KeepAliveService: ObservableObject {
 
     @Published private(set) var isActive = false
     @Published private(set) var lastError: String?
+    @Published private(set) var reheals = 0
 
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private var keepAliveBuffer: AVAudioPCMBuffer?
     private var isEngineConfigured = false
     private var observers: [NSObjectProtocol] = []
+    private var watchdogTimer: Timer?
 
     private init() {
         let center = NotificationCenter.default
@@ -80,6 +82,7 @@ final class KeepAliveService: ObservableObject {
     }
 
     func start() {
+        startWatchdogIfNeeded()
         do {
             let session = AVAudioSession.sharedInstance()
             let options: AVAudioSession.CategoryOptions = Settings.shared.keepAliveOwnSession
@@ -111,6 +114,7 @@ final class KeepAliveService: ObservableObject {
     }
 
     func stop() {
+        stopWatchdog()
         playerNode.stop()
         audioEngine.pause()
         try? AVAudioSession.sharedInstance().setActive(
@@ -148,6 +152,42 @@ final class KeepAliveService: ObservableObject {
         playerNode.volume = 0.001
         keepAliveBuffer = buffer
         isEngineConfigured = true
+    }
+
+    private func startWatchdogIfNeeded() {
+        guard watchdogTimer == nil else { return }
+        let timer = Timer(timeInterval: 15, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.healIfNeeded()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        watchdogTimer = timer
+    }
+
+    private func stopWatchdog() {
+        watchdogTimer?.invalidate()
+        watchdogTimer = nil
+    }
+
+    private func healIfNeeded() {
+        guard Settings.shared.keepAliveEnabled else {
+            stopWatchdog()
+            return
+        }
+        guard !audioEngine.isRunning || !playerNode.isPlaying else {
+            isActive = true
+            return
+        }
+
+        reheals += 1
+        isActive = false
+        ServerTelemetry.shared.recordSystemEvent(
+            method: "KEEPALIVE",
+            path: "/audio/reheal",
+            status: 0
+        )
+        start()
     }
 
     private func handleInterruption(_ notification: Notification) {
