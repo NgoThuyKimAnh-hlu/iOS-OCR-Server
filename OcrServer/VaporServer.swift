@@ -669,6 +669,8 @@ struct AdminSettingsResponse: Content, Sendable {
     let http_port: Int
     let keep_alive: Bool
     let keep_alive_own_session: Bool
+    let auto_blackout_idle_s: Int
+    let blackout: Bool
     let watchdog_interval_s: Double
     let debug_verbose: Bool
     let admin_token: String
@@ -722,6 +724,8 @@ struct AdminSettingsPatch: Content, Sendable {
     let http_port: Int?
     let keep_alive: Bool?
     let keep_alive_own_session: Bool?
+    let auto_blackout_idle_s: Int?
+    let blackout: Bool?
     let watchdog_interval_s: Double?
     let debug_verbose: Bool?
     let admin_token: String?
@@ -2908,6 +2912,8 @@ actor VaporServer {
             http_port: settings.httpPort,
             keep_alive: settings.keepAliveEnabled,
             keep_alive_own_session: settings.keepAliveOwnSession,
+            auto_blackout_idle_s: settings.autoBlackoutIdleSeconds,
+            blackout: DisplayModeController.shared.isBlackout,
             watchdog_interval_s: settings.watchdogIntervalSeconds,
             debug_verbose: settings.debugVerbose,
             admin_token: settings.adminToken,
@@ -3139,6 +3145,19 @@ actor VaporServer {
             KeepAliveService.shared.setOwnSession(value)
             applied.append("keep_alive_own_session")
         }
+        if let value = patch.auto_blackout_idle_s {
+            if value >= 0 {
+                settings.autoBlackoutIdleSeconds = value
+                DisplayModeController.shared.refreshAutoBlackoutSchedule()
+                applied.append("auto_blackout_idle_s")
+            } else {
+                rejected.append("auto_blackout_idle_s: expected 0 or more seconds")
+            }
+        }
+        if let value = patch.blackout {
+            DisplayModeController.shared.setBlackout(value)
+            applied.append("blackout")
+        }
         if let value = patch.debug_verbose {
             settings.debugVerbose = value
             applied.append("debug_verbose")
@@ -3273,6 +3292,8 @@ actor VaporServer {
             item("http_port", "int", 1024, 65_535, restart: true),
             item("keep_alive", "bool"),
             item("keep_alive_own_session", "bool"),
+            item("auto_blackout_idle_s", "int", 0),
+            item("blackout", "bool"),
             item("watchdog_interval_s", "double", 10, 3600),
             item("debug_verbose", "bool"),
             item("admin_token", "string", 0, 512, secret: true),

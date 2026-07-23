@@ -86,6 +86,7 @@ struct ServerHealthResponse: Content, Sendable {
     let requests_ok: Int
     let requests_fail: Int
     let auto_restarts: Int
+    let blackout: Bool
     let network: ServerNetworkHealthStatus
     let keep_alive: KeepAliveHealthStatus
     let battery: ServerBatteryStatus
@@ -214,6 +215,7 @@ final class ServerTelemetry: ObservableObject {
             requests_ok: requestsOK,
             requests_fail: requestsFail,
             auto_restarts: autoRestarts,
+            blackout: DisplayModeController.shared.isBlackout,
             network: ServerNetworkHealthStatus(
                 bound_ip: boundNetwork?.currentIP,
                 current_ip: currentNetwork.currentIP,

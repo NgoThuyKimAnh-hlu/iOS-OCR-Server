@@ -15,6 +15,7 @@ final class DisplayModeController: ObservableObject {
 
     private var brightnessBeforeBlackout: CGFloat?
     private var sceneIsActive = false
+    private var autoBlackoutTask: Task<Void, Never>?
 
     private init() {}
 
@@ -26,6 +27,7 @@ final class DisplayModeController: ObservableObject {
 
         brightnessBeforeBlackout = UIScreen.main.brightness
         isBlackout = true
+        cancelAutoBlackout()
         applyActiveDisplayState()
     }
 
@@ -37,14 +39,36 @@ final class DisplayModeController: ObservableObject {
         if sceneIsActive {
             UIApplication.shared.isIdleTimerDisabled = true
         }
+        scheduleAutoBlackout()
+    }
+
+    func setBlackout(_ enabled: Bool) {
+        if enabled {
+            enterBlackout()
+        } else {
+            exitBlackout()
+        }
+    }
+
+    func recordUserInteraction() {
+        guard sceneIsActive, !isBlackout else { return }
+        scheduleAutoBlackout()
+    }
+
+    func refreshAutoBlackoutSchedule() {
+        scheduleAutoBlackout()
     }
 
     func sceneActivityChanged(isActive: Bool) {
         sceneIsActive = isActive
         if isActive {
             applyActiveDisplayState()
+            scheduleAutoBlackout()
         } else if isBlackout {
+            cancelAutoBlackout()
             restoreBrightness(keepSavedValue: true)
+        } else {
+            cancelAutoBlackout()
         }
     }
 
@@ -64,6 +88,27 @@ final class DisplayModeController: ObservableObject {
         if !keepSavedValue {
             self.brightnessBeforeBlackout = nil
         }
+    }
+
+    private func scheduleAutoBlackout() {
+        cancelAutoBlackout()
+        let idleSeconds = Settings.shared.autoBlackoutIdleSeconds
+        guard sceneIsActive, !isBlackout, idleSeconds > 0 else { return }
+
+        autoBlackoutTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(idleSeconds))
+            } catch {
+                return
+            }
+            guard let self, self.sceneIsActive, !self.isBlackout else { return }
+            self.enterBlackout()
+        }
+    }
+
+    private func cancelAutoBlackout() {
+        autoBlackoutTask?.cancel()
+        autoBlackoutTask = nil
     }
 }
 

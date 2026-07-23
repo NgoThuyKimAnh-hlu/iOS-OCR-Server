@@ -208,6 +208,11 @@ final class Settings {
         set { defaults.set(newValue, forKey: "keepAliveOwnSession") }
     }
 
+    var autoBlackoutIdleSeconds: Int {
+        get { max(0, integer("autoBlackoutIdleSeconds", 0)) }
+        set { defaults.set(max(0, newValue), forKey: "autoBlackoutIdleSeconds") }
+    }
+
     var watchdogIntervalSeconds: Double {
         get { double("watchdogIntervalSeconds", 60) }
         set { defaults.set(newValue, forKey: "watchdogIntervalSeconds") }

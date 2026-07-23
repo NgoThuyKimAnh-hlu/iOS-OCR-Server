@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State var languageCorrection = Settings.shared.languageCorrection
     @State var autoDetectLanguage = Settings.shared.automaticallyDetectsLanguage
     @State var keepAliveEnabled = Settings.shared.keepAliveEnabled
+    @State var autoBlackoutIdleSeconds = Settings.shared.autoBlackoutIdleSeconds
     @State var adminToken = Settings.shared.adminToken
     @State var improveEnabled = Settings.shared.improveEnabled
     @State var debugVerbose = Settings.shared.debugVerbose
@@ -80,6 +81,33 @@ struct SettingsView: View {
                         }
                         .padding(.vertical, 4)
                     }
+
+                    Section("Farm Mode") {
+                        HStack(spacing: 12) {
+                            Image(systemName: "moon.zzz.fill")
+                                .font(.title2)
+                                .foregroundColor(.accentColor)
+                                .frame(width: 28, height: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Auto-blackout khi idle")
+                                    .font(.body)
+                                    .fontWeight(.medium)
+                                Text("0 = tắt")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            TextField(
+                                "Seconds",
+                                value: $autoBlackoutIdleSeconds,
+                                format: .number
+                            )
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 90)
+                        }
+                        .padding(.vertical, 4)
+                    }
                     
                     Button(action: apply) {
                         HStack(spacing: 8) {
@@ -125,6 +153,15 @@ struct SettingsView: View {
             }
             .onChange(of: keepAliveEnabled) { oldValue, newValue in
                 serverManager.setKeepAliveEnabled(newValue)
+            }
+            .onChange(of: autoBlackoutIdleSeconds) { oldValue, newValue in
+                let normalized = max(0, newValue)
+                if normalized != newValue {
+                    autoBlackoutIdleSeconds = normalized
+                    return
+                }
+                Settings.shared.autoBlackoutIdleSeconds = normalized
+                DisplayModeController.shared.refreshAutoBlackoutSchedule()
             }
             .onChange(of: adminToken) { oldValue, newValue in
                 Settings.shared.adminToken = newValue.trimmingCharacters(

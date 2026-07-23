@@ -23,6 +23,12 @@ struct OcrServerApp: App {
                 TranslationServiceHost(service: TranslationService.shared)
             }
             .blackoutCovered(when: displayMode.isBlackout)
+            .background {
+                UserActivityMonitor {
+                    displayMode.recordUserInteraction()
+                }
+                .frame(width: 0, height: 0)
+            }
             .onChange(of: scenePhase, initial: true) { _, newPhase in
                 displayMode.sceneActivityChanged(isActive: newPhase == .active)
             }
