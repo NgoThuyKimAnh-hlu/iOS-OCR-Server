@@ -9,6 +9,7 @@ import SwiftUI
 import Combine
 import Vision
 import Foundation
+import UIKit
 
 @MainActor
 final class VaporServerManager: ObservableObject {
@@ -47,6 +48,14 @@ final class VaporServerManager: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.checkNetworkBinding(trigger: "foreground")
+                }
+            }
+            .store(in: &cancellables)
         networkMonitor.start { [weak self] snapshot in
             Task { @MainActor in
                 self?.handleNetworkPathUpdate(snapshot)
@@ -74,6 +83,7 @@ final class VaporServerManager: ObservableObject {
             self.cancelPendingNetworkRebind()
             self.stopBonjour()
             await self.server.stop()
+            self.networkMonitor.clearServerBinding()
             KeepAliveService.shared.stop()
             ServerTelemetry.shared.markServerStopped()
             self.isRunning = false
@@ -125,10 +135,14 @@ final class VaporServerManager: ObservableObject {
             isRunning = true
             status = String(localized: "server is running")
             ServerTelemetry.shared.markServerStarted()
+            let boundSnapshot = networkMonitor.currentSnapshot()
+            networkMonitor.markServerBound(to: boundSnapshot)
+            lastNetworkSnapshot = boundSnapshot
             refreshNetworkAddresses()
             publishBonjour(port: selectedPort)
             startWatchdog()
         } catch {
+            networkMonitor.clearServerBinding()
             isRunning = false
             status = String(localized: "unable to start the server")
             ServerTelemetry.shared.recordSystemEvent(
@@ -160,6 +174,7 @@ final class VaporServerManager: ObservableObject {
             self.watchdogTask?.cancel()
             self.watchdogTask = nil
             self.stopBonjour()
+            self.networkMonitor.clearServerBinding()
 
             if reason != nil {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
@@ -222,6 +237,30 @@ final class VaporServerManager: ObservableObject {
         networkRebindTask = nil
     }
 
+    @discardableResult
+    private func checkNetworkBinding(trigger: String) -> Bool {
+        let current = networkMonitor.currentSnapshot()
+        lastNetworkSnapshot = current
+        refreshNetworkAddresses()
+        guard let reason = staleBindingReason(current: current) else { return false }
+        scheduleSocketRebind(reason: "\(trigger)-\(reason)")
+        return true
+    }
+
+    private func staleBindingReason(current: NetworkSnapshot) -> String? {
+        guard current.isSatisfied,
+              let bound = networkMonitor.serverBoundSnapshot() else {
+            return nil
+        }
+        if let currentIP = current.currentIP, bound.currentIP != currentIP {
+            return "ip-mismatch"
+        }
+        if bound.interfaceIdentity != current.interfaceIdentity {
+            return "interface-mismatch"
+        }
+        return nil
+    }
+
     private func startUsingPortPolicy() async throws -> Int {
         var lastError: Error?
         let primaryPort = Settings.shared.httpPort
@@ -277,6 +316,10 @@ final class VaporServerManager: ObservableObject {
                 }
 
                 guard let self, self.isRunning, !self.isRestarting else { continue }
+                if self.checkNetworkBinding(trigger: "watchdog") {
+                    consecutiveFailures = 0
+                    continue
+                }
                 if await self.healthCheck() {
                     consecutiveFailures = 0
                 } else {

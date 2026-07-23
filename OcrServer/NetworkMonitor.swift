@@ -36,6 +36,7 @@ final class NetworkMonitor: @unchecked Sendable {
     private let queue = DispatchQueue(label: "site.riddleling.compute.network-path")
     private let lock = NSLock()
     private var started = false
+    private var boundSnapshot: NetworkSnapshot?
     private var updateHandler: ((NetworkSnapshot) -> Void)?
 
     private init() {}
@@ -58,6 +59,24 @@ final class NetworkMonitor: @unchecked Sendable {
         Self.makeSnapshot(from: monitor.currentPath)
     }
 
+    func markServerBound(to snapshot: NetworkSnapshot) {
+        lock.lock()
+        boundSnapshot = snapshot
+        lock.unlock()
+    }
+
+    func clearServerBinding() {
+        lock.lock()
+        boundSnapshot = nil
+        lock.unlock()
+    }
+
+    func serverBoundSnapshot() -> NetworkSnapshot? {
+        lock.lock()
+        defer { lock.unlock() }
+        return boundSnapshot
+    }
+
     private func receive(_ path: NWPath) {
         let snapshot = Self.makeSnapshot(from: path)
         lock.lock()
@@ -75,13 +94,18 @@ final class NetworkMonitor: @unchecked Sendable {
             return lhs.name < rhs.name
         }
         let active = available.filter { path.usesInterfaceType($0.type) }
-        let selected = active.first { addresses[$0.name] != nil }
-            ?? active.first
-            ?? available.first { addresses[$0.name] != nil }
-            ?? available.first
         let fallbackAddress = addresses.sorted { lhs, rhs in
             lhs.key < rhs.key
         }.first
+        let fallbackInterface = fallbackAddress.flatMap { address in
+            available.first { $0.name == address.key }
+        }
+        let selectedWithAddress = active.first { addresses[$0.name] != nil }
+            ?? available.first { addresses[$0.name] != nil }
+        let selected = selectedWithAddress
+            ?? active.first
+            ?? fallbackInterface
+            ?? available.first
 
         return NetworkSnapshot(
             pathStatus: pathStatusName(path.status),
@@ -94,7 +118,8 @@ final class NetworkMonitor: @unchecked Sendable {
             },
             interfaceName: selected?.name ?? fallbackAddress?.key,
             interfaceType: selected.map { interfaceTypeName($0.type) } ?? "none",
-            currentIP: selected.flatMap { addresses[$0.name] } ?? fallbackAddress?.value
+            currentIP: selectedWithAddress.flatMap { addresses[$0.name] }
+                ?? fallbackAddress?.value
         )
     }
 
