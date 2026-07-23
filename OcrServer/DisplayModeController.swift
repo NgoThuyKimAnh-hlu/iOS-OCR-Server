@@ -68,9 +68,22 @@ final class DisplayModeController: ObservableObject {
 }
 
 struct BlackoutView: View {
+    @ObservedObject private var displayMode = DisplayModeController.shared
+
     var body: some View {
         Color.black
             .ignoresSafeArea()
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                displayMode.exitBlackout()
+            }
+            .accessibilityElement()
+            .accessibilityLabel("Blackout active")
+            .accessibilityHint("Double-tap to return to the console")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                displayMode.exitBlackout()
+            }
     }
 }
 
