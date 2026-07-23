@@ -68,6 +68,14 @@ struct KeepAliveHealthStatus: Content, Sendable {
     let player_playing: Bool
 }
 
+struct ServerNetworkHealthStatus: Content, Sendable {
+    let bound_ip: String?
+    let current_ip: String?
+    let socket_rebinds: Int
+    let path_status: String
+    let interface: String
+}
+
 struct ServerHealthResponse: Content, Sendable {
     let status: String
     let uptime_s: Int
@@ -78,6 +86,7 @@ struct ServerHealthResponse: Content, Sendable {
     let requests_ok: Int
     let requests_fail: Int
     let auto_restarts: Int
+    let network: ServerNetworkHealthStatus
     let keep_alive: KeepAliveHealthStatus
     let battery: ServerBatteryStatus
     let thermal: String
@@ -188,6 +197,8 @@ final class ServerTelemetry: ObservableObject {
     ) -> ServerHealthResponse {
         let device = UIDevice.current
         let keepAlive = KeepAliveService.shared
+        let currentNetwork = NetworkMonitor.shared.currentSnapshot()
+        let boundNetwork = NetworkMonitor.shared.serverBoundSnapshot()
         let level = device.batteryLevel >= 0
             ? Int((device.batteryLevel * 100).rounded())
             : nil
@@ -203,6 +214,13 @@ final class ServerTelemetry: ObservableObject {
             requests_ok: requestsOK,
             requests_fail: requestsFail,
             auto_restarts: autoRestarts,
+            network: ServerNetworkHealthStatus(
+                bound_ip: boundNetwork?.currentIP,
+                current_ip: currentNetwork.currentIP,
+                socket_rebinds: socketRebinds,
+                path_status: currentNetwork.pathStatus,
+                interface: currentNetwork.interfaceIdentity
+            ),
             keep_alive: KeepAliveHealthStatus(
                 active: keepAlive.isActive,
                 own_session: Settings.shared.keepAliveOwnSession,
