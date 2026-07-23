@@ -16,8 +16,8 @@ occurred. Version is `1.7.0 (34)`.
   counter.
 - K4 `28c5a2f`: media-services reset rebuild, route recovery, interruption
   `.shouldResume`, and bounded 0.5/1/2-second start retries.
-- K5 is the commit containing this note: nested `/health.keep_alive` diagnostics,
-  build version, report, and completion marker.
+- K5 `4193e3d`: nested `/health.keep_alive` diagnostics, build version, report,
+  and completion marker.
 
 Verified: 39/39 Swift files syntax-parse, four inline scripts parse, both Python
 tools syntax-compile, K1-K5 static coverage and version wiring pass, and
@@ -27,4 +27,3 @@ Open: no Apple SDK/Xcode or device was available, so type-check/link/IPA and rea
 long-lock survival, inaudibility, session arbitration, watchdog background
 execution, reset/route/interruption recovery, and runtime health JSON remain
 unverified. Full details: `BUILD_V7_codex.md`.
-

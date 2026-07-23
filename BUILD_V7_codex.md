@@ -14,7 +14,7 @@ Implementation commits:
 - K2 `6714601` - `Own keep-alive audio session by default`
 - K3 `a371427` - `Self-heal keep-alive audio every 15 seconds`
 - K4 `28c5a2f` - `Recover keep-alive audio from session resets`
-- K5 - `Expose keep-alive health diagnostics` (the commit containing this report)
+- K5 `4193e3d` - `Expose keep-alive health diagnostics`
 
 The implementation only changes keep-alive audio, its persistent settings knob,
 the keep-alive health payload, and the requested build version. Governor, OCR,
@@ -104,4 +104,3 @@ and the existing admin authentication/request-limit behavior were not changed.
   audio-session ownership, actual iOS culling behavior, watchdog execution in
   background, media-server reset, route changes, interruptions, and runtime
   `/health` serialization remain device checks.
-
