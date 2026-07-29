@@ -62,6 +62,8 @@ actor ThermalGovernor {
     static let shared = ThermalGovernor()
 
     private var thermalState = ProcessInfo.processInfo.thermalState
+    private var lastFinish = Date()
+    private let staleInFlightSeconds: TimeInterval = 120
     private var throttling = false
     private var inFlight = 0
     private var waiters: [WaitingAdmission] = []
@@ -112,6 +114,14 @@ actor ThermalGovernor {
         sampleThermalState()
         let thermal = ThermalStatus.name(for: thermalState)
 
+        // Belt and braces for the leak fixed in the middleware: if the server claims to be busy
+        // but nothing has actually finished for a long time, the counter is stale, not the truth.
+        // Without this a single missed release keeps a phone at "queue_full" until the app is
+        // force-quit, which on a headless farm phone means a human walking to the device.
+        if inFlight > 0, Date().timeIntervalSince(lastFinish) > staleInFlightSeconds {
+            inFlight = 0
+        }
+
         // 2026-07-29 REMOVED: rejecting work because ProcessInfo.thermalState reads .serious.
         //
         // Measured on the live farm, not theorised: a phone reporting thermal=serious served 6/6
@@ -146,6 +156,7 @@ actor ThermalGovernor {
     }
 
     func finish() {
+        lastFinish = Date()
         inFlight = max(0, inFlight - 1)
         sampleThermalState()
         promoteWaiters()
@@ -248,21 +259,33 @@ struct OCRAdmissionMiddleware: AsyncMiddleware {
             return response
         }
 
+        // The slot is released through a detached task on purpose. `await finish()` inside this
+        // request's task is skipped when the task is cancelled — which is exactly what happens
+        // every time a client gives up on a slow page. Each abandoned request then leaked one
+        // inFlight slot permanently, and once the leak reached maximumInFlight the phone answered
+        // {"reason":"queue_full"} to everything, forever, at zero load and with thermal=nominal.
+        // Two farm phones were measured in that state (503 and 656 refusals/min while idle) while
+        // a third, which had never had a request abandoned, ran clean with 0 failures.
+        // A detached task is not cancelled with its parent, so the slot always comes back.
+        func releaseSlot() {
+            Task.detached(priority: .high) { await ThermalGovernor.shared.finish() }
+        }
+
         if decision.startDelayNanoseconds > 0 {
             do {
                 try await Task.sleep(nanoseconds: decision.startDelayNanoseconds)
             } catch {
-                await ThermalGovernor.shared.finish()
+                releaseSlot()
                 throw error
             }
         }
 
         do {
             let response = try await next.respond(to: request)
-            await ThermalGovernor.shared.finish()
+            releaseSlot()
             return response
         } catch {
-            await ThermalGovernor.shared.finish()
+            releaseSlot()
             throw error
         }
     }
