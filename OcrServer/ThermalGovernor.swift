@@ -52,6 +52,7 @@ private struct ThermalAdmissionDecision: Sendable {
     let reason: String
     let retryAfter: Int
     let startDelayNanoseconds: UInt64
+    var permit: UUID? = nil
 }
 
 private struct WaitingAdmission {
@@ -62,10 +63,12 @@ actor ThermalGovernor {
     static let shared = ThermalGovernor()
 
     private var thermalState = ProcessInfo.processInfo.thermalState
-    private var lastFinish = Date()
-    private let staleInFlightSeconds: TimeInterval = 120
+    // Each admitted request holds a permit with its own start time, so a stuck one can be reclaimed
+    // individually and a late release from it becomes a no-op instead of stealing someone's slot.
+    private var permits: [UUID: Date] = [:]
+    private let permitDeadline: TimeInterval = 300
     private var throttling = false
-    private var inFlight = 0
+    private var inFlight: Int { permits.count }
     private var waiters: [WaitingAdmission] = []
     private var guardEnabled = true
     private var maximumInFlight = 2
@@ -114,13 +117,7 @@ actor ThermalGovernor {
         sampleThermalState()
         let thermal = ThermalStatus.name(for: thermalState)
 
-        // Belt and braces for the leak fixed in the middleware: if the server claims to be busy
-        // but nothing has actually finished for a long time, the counter is stale, not the truth.
-        // Without this a single missed release keeps a phone at "queue_full" until the app is
-        // force-quit, which on a headless farm phone means a human walking to the device.
-        if inFlight > 0, Date().timeIntervalSince(lastFinish) > staleInFlightSeconds {
-            inFlight = 0
-        }
+        reclaimStalePermits()
 
         // 2026-07-29 REMOVED: rejecting work because ProcessInfo.thermalState reads .serious.
         //
@@ -155,11 +152,19 @@ actor ThermalGovernor {
         }
     }
 
-    func finish() {
-        lastFinish = Date()
-        inFlight = max(0, inFlight - 1)
+    func finish(permit: UUID?) {
+        // A release for a permit we already reclaimed is a no-op: it must not free somebody else's
+        // slot. That is the whole reason permits are identified rather than counted.
+        if let permit { permits.removeValue(forKey: permit) }
         sampleThermalState()
         promoteWaiters()
+    }
+
+    /// Reclaim slots whose request has been gone far longer than any real page takes. Individual,
+    /// never a global reset: zeroing the count would double-release the requests still running.
+    private func reclaimStalePermits() {
+        let cutoff = Date().addingTimeInterval(-permitDeadline)
+        permits = permits.filter { $0.value > cutoff }
     }
 
     func snapshot(guardEnabled: Bool) -> ThermalStatusSnapshot {
@@ -186,13 +191,15 @@ actor ThermalGovernor {
     }
 
     private func reserveSlot(thermal: String) -> ThermalAdmissionDecision {
-        inFlight += 1
+        let permit = UUID()
+        permits[permit] = Date()
         return ThermalAdmissionDecision(
             admitted: true,
             thermal: thermal,
             reason: "admitted",
             retryAfter: 0,
-            startDelayNanoseconds: fairAdmissionDelay()
+            startDelayNanoseconds: fairAdmissionDelay(),
+            permit: permit
         )
     }
 
@@ -259,16 +266,20 @@ struct OCRAdmissionMiddleware: AsyncMiddleware {
             return response
         }
 
-        // The slot is released through a detached task on purpose. `await finish()` inside this
-        // request's task is skipped when the task is cancelled — which is exactly what happens
-        // every time a client gives up on a slow page. Each abandoned request then leaked one
-        // inFlight slot permanently, and once the leak reached maximumInFlight the phone answered
-        // {"reason":"queue_full"} to everything, forever, at zero load and with thermal=nominal.
-        // Two farm phones were measured in that state (503 and 656 refusals/min while idle) while
-        // a third, which had never had a request abandoned, ran clean with 0 failures.
-        // A detached task is not cancelled with its parent, so the slot always comes back.
+        // Observed: phones answered {"reason":"queue_full"} at zero load with thermal=nominal
+        // (503 and 656 refusals/min on two idle devices) while a third ran with 0 failures, and
+        // /admin/restart did not clear it — so admission slots were being accounted but never
+        // returned. The exact escape path is NOT established: Vapor bridges this middleware with
+        // EventLoopPromise.completeWithTask, which SwiftNIO documents as NOT honouring
+        // cancellation, so a client timeout should still reach the release below.
+        //
+        // Rather than guess the path, make the accounting survive whatever it is: releasing through
+        // a detached task means a cancelled parent cannot skip it, and permits carry their own start
+        // time so a slot that is never returned is reclaimed individually in admit(). A late release
+        // for a reclaimed permit is a no-op and cannot free another request's slot.
+        let permit = decision.permit
         func releaseSlot() {
-            Task.detached(priority: .high) { await ThermalGovernor.shared.finish() }
+            Task.detached(priority: .high) { await ThermalGovernor.shared.finish(permit: permit) }
         }
 
         if decision.startDelayNanoseconds > 0 {
