@@ -112,9 +112,19 @@ actor ThermalGovernor {
         sampleThermalState()
         let thermal = ThermalStatus.name(for: thermalState)
 
-        if guardEnabled && throttling {
-            return thermalRejection()
-        }
+        // 2026-07-29 REMOVED: rejecting work because ProcessInfo.thermalState reads .serious.
+        //
+        // Measured on the live farm, not theorised: a phone reporting thermal=serious served 6/6
+        // serial /upload requests at 826 ms with clean output, and its flag fell back to nominal on
+        // its own once load stopped. Yet two concurrent requests to that same phone returned
+        // {"reason":"thermal_serious"} 128 times out of 128 in 40 s. iOS raises .serious for ambient
+        // heat and charging, not for "Vision cannot run" — so this gate refused work the device was
+        // demonstrably able to do, and cost the farm roughly 3x its throughput (560 -> 182 p/min)
+        // once the client was tuned down to avoid the 429s it produced.
+        //
+        // Back-pressure still exists and is honest: maximumInFlight bounds concurrent work and
+        // maximumQueueDepth bounds the wait queue below. Those reflect real capacity. Thermal state
+        // stays REPORTED in /health for observability; it no longer gates admission.
 
         if inFlight < self.maximumInFlight {
             return reserveSlot(thermal: thermal)
@@ -161,9 +171,7 @@ actor ThermalGovernor {
             throttling = true
         }
 
-        if guardEnabled && throttling {
-            rejectWaitingRequests()
-        }
+        // Thermal state changing no longer cancels queued work — see the note in admit().
     }
 
     private func reserveSlot(thermal: String) -> ThermalAdmissionDecision {
@@ -178,10 +186,7 @@ actor ThermalGovernor {
     }
 
     private func promoteWaiters() {
-        guard !(guardEnabled && throttling) else {
-            rejectWaitingRequests()
-            return
-        }
+        // Waiters are promoted purely on freed capacity; the thermal flag is observability only.
         let thermal = ThermalStatus.name(for: thermalState)
         while inFlight < maximumInFlight, !waiters.isEmpty {
             let waiter = waiters.removeFirst()
@@ -189,26 +194,6 @@ actor ThermalGovernor {
         }
     }
 
-    private func rejectWaitingRequests() {
-        guard !waiters.isEmpty else { return }
-        let rejection = thermalRejection()
-        let waiting = waiters
-        waiters.removeAll(keepingCapacity: true)
-        for waiter in waiting {
-            waiter.continuation.resume(returning: rejection)
-        }
-    }
-
-    private func thermalRejection() -> ThermalAdmissionDecision {
-        let baseRetry = thermalState == .critical ? 8 : 3
-        return ThermalAdmissionDecision(
-            admitted: false,
-            thermal: ThermalStatus.name(for: thermalState),
-            reason: thermalState == .critical ? "thermal_critical" : "thermal_serious",
-            retryAfter: baseRetry + Int.random(in: 0...2),
-            startDelayNanoseconds: 0
-        )
-    }
 
     private func fairAdmissionDelay() -> UInt64 {
         guard thermalState == .fair, fairGapMilliseconds > 0 else {
