@@ -52,10 +52,15 @@ def main() -> None:
         if required_value not in values:
             fail(f"{key} is missing {required_value!r}: {values!r}")
 
+    build_sha = plist.get("COMPUTE_BUILD_SHA")
+    if not isinstance(build_sha, str) or len(build_sha) < 7 or "$(" in build_sha:
+        fail(f"COMPUTE_BUILD_SHA is missing or unresolved: {build_sha!r}")
+
     print(
         "Verified packaged Info.plist: "
         "UIBackgroundModes contains 'audio'; "
-        "NSBonjourServices contains '_http._tcp'."
+        "NSBonjourServices contains '_http._tcp'; "
+        f"COMPUTE_BUILD_SHA={build_sha}."
     )
 
 
