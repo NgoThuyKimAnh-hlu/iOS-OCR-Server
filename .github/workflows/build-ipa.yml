@@ -23,16 +23,28 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
+            COMPUTE_BUILD_SHA="${GITHUB_SHA::7}" \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO | tail -50
       - name: Package IPA
+        id: package
         run: |
           APP=$(find build/Build/Products -name "*.app" -maxdepth 3 | head -1)
           echo "APP=$APP"
+          test -n "$APP"
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")
+          BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")
+          IPA="OcrServer-${VERSION}-b${BUILD}-unsigned.ipa"
+          rm -rf Payload
           mkdir -p Payload
           cp -R "$APP" Payload/
-          zip -qr OcrServer-unsigned.ipa Payload
-          ls -la OcrServer-unsigned.ipa
+          zip -qr "$IPA" Payload
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "ipa=$IPA" >> "$GITHUB_OUTPUT"
+          ls -la "$IPA"
+      - name: Verify packaged Info.plist
+        run: python3 tools/verify_ipa_plist.py "${{ steps.package.outputs.ipa }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: OcrServer-unsigned-ipa
-          path: OcrServer-unsigned.ipa
+          name: OcrServer-${{ steps.package.outputs.version }}-b${{ steps.package.outputs.build }}-unsigned-ipa
+          path: ${{ steps.package.outputs.ipa }}

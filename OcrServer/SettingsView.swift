@@ -10,6 +10,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var serverManager: VaporServerManager
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var releaseUpdate = ReleaseUpdateModel()
     @State var recognitionLevel = Settings.shared.recognitionLevel.capitalized
     @State var languageCorrection = Settings.shared.languageCorrection
     @State var autoDetectLanguage = Settings.shared.automaticallyDetectsLanguage
@@ -81,6 +82,58 @@ struct SettingsView: View {
                                 .autocorrectionDisabled()
                         }
                         .padding(.vertical, 4)
+                    }
+
+                    Section("App Update") {
+                        HStack(spacing: 12) {
+                            Image(systemName: "shippingbox.fill")
+                                .font(.title2)
+                                .foregroundColor(.accentColor)
+                                .frame(width: 28, height: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Ban dang cai")
+                                    .font(.body)
+                                    .fontWeight(.medium)
+                                Text(BuildInfo.versionStamp)
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            if let gitSHA = BuildInfo.gitSHA {
+                                Text(gitSHA)
+                                    .font(.caption2.monospaced())
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+
+                        Text(releaseUpdate.statusText)
+                            .font(.caption)
+                            .foregroundColor(releaseUpdate.updateAvailable ? .orange : .secondary)
+
+                        Button {
+                            Task { await releaseUpdate.check() }
+                        } label: {
+                            Label(
+                                releaseUpdate.isChecking ? "Dang kiem tra..." : "Kiem tra ban moi",
+                                systemImage: "arrow.clockwise"
+                            )
+                        }
+                        .disabled(releaseUpdate.isChecking)
+
+                        if releaseUpdate.updateAvailable, let latest = releaseUpdate.latest {
+                            Button {
+                                releaseUpdate.openUpdatePage()
+                            } label: {
+                                Label("Mo trang tai IPA", systemImage: "arrow.up.forward.app")
+                            }
+                            Text(latest.releaseNotes)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text("Thoat Guided Access truoc khi chuyen sang ESign de ky va cai IPA.")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
 
                     Section("Farm Mode") {
@@ -185,6 +238,10 @@ struct SettingsView: View {
             }
             .onChange(of: debugVerbose) { oldValue, newValue in
                 Settings.shared.debugVerbose = newValue
+            }
+            .task {
+                guard !releaseUpdate.hasChecked else { return }
+                await releaseUpdate.check()
             }
         }
     }

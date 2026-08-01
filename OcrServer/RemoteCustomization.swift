@@ -24,6 +24,16 @@ enum ComputeServiceName: String, CaseIterable, Codable, Sendable {
     case barcode
 }
 
+struct RuntimeCapabilitiesResponse: Content, Sendable {
+    let schema: Int
+    let device_id: String
+    let version: String
+    let git_sha: String?
+    let services: [String]
+    let configured_ports: [Int]
+    let config_revision: String
+}
+
 struct OCRCustomizationSummary: Content, Sendable {
     let version: Int
     let hash: String

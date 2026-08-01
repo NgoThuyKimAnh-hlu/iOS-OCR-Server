@@ -26,7 +26,6 @@ final class KeepAliveService: ObservableObject {
     private var watchdogTimer: Timer?
     private var recoveryTask: Task<Void, Never>?
     private var interruptionActive = false
-    private var watchdogResumeAllowed = true
 
     private init() {
         let center = NotificationCenter.default
@@ -111,7 +110,6 @@ final class KeepAliveService: ObservableObject {
 
     func start() {
         startWatchdogIfNeeded()
-        watchdogResumeAllowed = true
         startWithRetry(reason: "start")
     }
 
@@ -120,7 +118,6 @@ final class KeepAliveService: ObservableObject {
         recoveryTask?.cancel()
         recoveryTask = nil
         interruptionActive = false
-        watchdogResumeAllowed = true
         playerNode.stop()
         audioEngine.pause()
         try? AVAudioSession.sharedInstance().setActive(
@@ -134,8 +131,7 @@ final class KeepAliveService: ObservableObject {
         recoveryTask?.cancel()
         recoveryTask = nil
         guard Settings.shared.keepAliveEnabled,
-              !interruptionActive,
-              watchdogResumeAllowed else { return }
+              !interruptionActive else { return }
 
         do {
             try startAudio()
@@ -153,8 +149,7 @@ final class KeepAliveService: ObservableObject {
                     return
                 }
                 guard Settings.shared.keepAliveEnabled,
-                      !self.interruptionActive,
-                      self.watchdogResumeAllowed else { return }
+                      !self.interruptionActive else { return }
                 do {
                     try self.startAudio()
                     self.recoveryTask = nil
@@ -252,7 +247,7 @@ final class KeepAliveService: ObservableObject {
             stopWatchdog()
             return
         }
-        guard !interruptionActive, watchdogResumeAllowed else { return }
+        guard !interruptionActive else { return }
         guard !audioEngine.isRunning || !playerNode.isPlaying else {
             isActive = true
             return
@@ -280,11 +275,8 @@ final class KeepAliveService: ObservableObject {
             isActive = false
         case .ended:
             interruptionActive = false
-            let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey]
-                as? UInt ?? 0
-            let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
-            watchdogResumeAllowed = options.contains(.shouldResume)
-            guard Settings.shared.keepAliveEnabled, watchdogResumeAllowed else { return }
+            // This unattended service does not require user input to resume playback.
+            guard Settings.shared.keepAliveEnabled else { return }
             startWithRetry(reason: "interruption-ended")
         @unknown default:
             return
@@ -295,7 +287,6 @@ final class KeepAliveService: ObservableObject {
         let shouldRestart = Settings.shared.keepAliveEnabled
         resetAudioGraph()
         interruptionActive = false
-        watchdogResumeAllowed = true
         guard shouldRestart else { return }
         ServerTelemetry.shared.recordSystemEvent(
             method: "KEEPALIVE",
@@ -314,7 +305,6 @@ final class KeepAliveService: ObservableObject {
             path: "/audio/route-change/\(rawReason)",
             status: 0
         )
-        watchdogResumeAllowed = true
         startWithRetry(reason: "route-change")
     }
 

@@ -304,26 +304,25 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = ocrserver_icon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 37;
+				CURRENT_PROJECT_VERSION = 38;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/OcrServer-Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Compute;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to capture images for OCR.";
-				INFOPLIST_KEY_NSBonjourServices = "_http._tcp";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Compute advertises its local HTTP server to devices on your network.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Ứng dụng cần quyền mic để nhận dạng giọng nói.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Ứng dụng cần quyền nhận dạng giọng nói để chuyển âm thanh thành văn bản.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIBackgroundModes = audio;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.10.0;
+				MARKETING_VERSION = 1.11.0;
 				PRODUCT_BUNDLE_IDENTIFIER = site.riddleling.app.OcrServer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -342,26 +341,25 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = ocrserver_icon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 37;
+				CURRENT_PROJECT_VERSION = 38;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/OcrServer-Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Compute;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to capture images for OCR.";
-				INFOPLIST_KEY_NSBonjourServices = "_http._tcp";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Compute advertises its local HTTP server to devices on your network.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Ứng dụng cần quyền mic để nhận dạng giọng nói.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Ứng dụng cần quyền nhận dạng giọng nói để chuyển âm thanh thành văn bản.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIBackgroundModes = audio;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.10.0;
+				MARKETING_VERSION = 1.11.0;
 				PRODUCT_BUNDLE_IDENTIFIER = site.riddleling.app.OcrServer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

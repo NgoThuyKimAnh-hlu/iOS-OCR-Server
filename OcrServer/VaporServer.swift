@@ -5,6 +5,7 @@
 //  Created by Riddle Ling on 2025/8/21.
 //
 
+import CryptoKit
 import Vapor
 import Vision
 
@@ -997,6 +998,41 @@ actor VaporServer {
                 )
             }
             return try Self.jsonResponse(.ok, health)
+        }
+
+        app.get("capabilities") { [weak self] req async throws -> Response in
+            guard let self else { throw Abort(.internalServerError) }
+            let settings = await MainActor.run { Self.adminSettingsSnapshot() }
+            let revision = try Self.runtimeConfigRevision(settings)
+            let port = await self.port
+            let response = RuntimeCapabilitiesResponse(
+                schema: 1,
+                device_id: BuildInfo.deviceID,
+                version: BuildInfo.versionStamp,
+                git_sha: BuildInfo.gitSHA,
+                services: ComputeServiceName.allCases.map(\.rawValue).sorted(),
+                configured_ports: [port],
+                config_revision: revision
+            )
+            return try Self.jsonResponse(.ok, response)
+        }
+
+        app.get("admin", "runtime") { [weak self] req async throws -> Response in
+            try await Self.requireAdminToken(request: req)
+            guard let self else { throw Abort(.internalServerError) }
+            let settings = await MainActor.run { Self.adminSettingsSnapshot() }
+            let revision = try Self.runtimeConfigRevision(settings)
+            let port = await self.port
+            let response = RuntimeCapabilitiesResponse(
+                schema: 1,
+                device_id: BuildInfo.deviceID,
+                version: BuildInfo.versionStamp,
+                git_sha: BuildInfo.gitSHA,
+                services: ComputeServiceName.allCases.map(\.rawValue).sorted(),
+                configured_ports: [port],
+                config_revision: revision
+            )
+            return try Self.jsonResponse(.ok, response)
         }
 
         app.get("stats") { [weak self] req async throws -> Response in
@@ -3756,6 +3792,13 @@ actor VaporServer {
         let res = Response(status: status)
         try res.content.encode(payload, as: .json)
         return res
+    }
+
+    private static func runtimeConfigRevision(_ settings: AdminSettingsResponse) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(settings)
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }
 
